@@ -36,16 +36,18 @@ como opção configurável via variável de ambiente, documentada no README, nun
 
 ## Fase 1 — V1: API básica funcional
 
-- [ ] FastAPI: app, roteamento, dependências (`Depends`)
-- [ ] Conexão com PostgreSQL via SQLAlchemy (models)
-- [ ] Alembic configurado, primeira migration
+- [x] FastAPI: app, roteamento, dependências (`Depends`) — `src/main.py`, app factory `create_app()`
+- [x] Configuração via Pydantic Settings (`src/infrastructure/config.py`)
+- [x] Engine assíncrono SQLAlchemy + `get_db()` dependency (`src/infrastructure/database/session.py`)
+- [x] Alembic configurado (template async), ligado às Settings e ao `Base.metadata`
+- [ ] Primeira migration real (depende de ter ao menos o model `User` e do Postgres rodando)
 - [ ] Autenticação: registro, login, JWT (access + refresh token), hash de senha
 - [ ] CRUD de documentos (sem processamento de IA ainda)
 - [ ] CRUD de conversas
 - [ ] Integração simples com um LLM (pergunta → resposta, sem RAG ainda)
-- [ ] Versionamento `/api/v1`, tratamento padronizado de erros
-- [ ] Health check (`/health`)
-- [ ] Documentação automática via Swagger
+- [x] Versionamento `/api/v1`, tratamento padronizado de erros (`src/api/middlewares/error_handling.py`)
+- [x] Health check (`/health`) — testado, retorna `{"status":"ok"}`
+- [x] Documentação automática via Swagger — testado em `/docs`
 
 ## Fase 2 — V2: RAG de verdade
 
@@ -112,3 +114,10 @@ como opção configurável via variável de ambiente, documentada no README, nun
 _(Vamos registrando aqui decisões, trade-offs e coisas aprendidas ao longo do caminho.)_
 
 - 2026-07-22: Setup inicial do repositório e estrutura de pastas.
+- 2026-07-22: Início da Fase 1 — app FastAPI (app factory), config via Pydantic Settings,
+  engine assíncrono SQLAlchemy, tratamento padronizado de erros, health check testado
+  (`/api/v1/health` → 200) e Swagger testado (`/docs` → 200). Alembic configurado (template
+  async) e testado — a conexão falhou por falta de Postgres local (esperado, sem Docker
+  instalado nesta máquina), mas confirmou que a configuração está correta.
+  **Pendente:** instalar Docker Desktop para subir Postgres/Redis e continuar com models,
+  primeira migration e autenticação.
