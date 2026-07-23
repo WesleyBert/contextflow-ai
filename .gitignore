@@ -13,6 +13,9 @@ htmlcov/
 # Env
 .env
 
+# Uploads locais (dado de runtime, não faz parte do código)
+uploads/
+
 # Docker
 *.log
 

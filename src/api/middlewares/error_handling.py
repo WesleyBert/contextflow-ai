@@ -6,6 +6,7 @@ from src.domain.exceptions.base import (
     ForbiddenError,
     NotFoundError,
     UnauthorizedError,
+    ValidationError,
 )
 
 _STATUS_BY_EXCEPTION = {
@@ -13,6 +14,7 @@ _STATUS_BY_EXCEPTION = {
     AlreadyExistsError: status.HTTP_409_CONFLICT,
     UnauthorizedError: status.HTTP_401_UNAUTHORIZED,
     ForbiddenError: status.HTTP_403_FORBIDDEN,
+    ValidationError: status.HTTP_422_UNPROCESSABLE_CONTENT,
 }
 
 

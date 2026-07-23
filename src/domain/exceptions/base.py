@@ -16,3 +16,7 @@ class UnauthorizedError(DomainError):
 
 class ForbiddenError(DomainError):
     """Usuário autenticado, mas sem permissão para o recurso (ex.: documento de outro usuário)."""
+
+
+class ValidationError(DomainError):
+    """Entrada do usuário viola uma regra de negócio (ex.: arquivo de tipo não suportado)."""

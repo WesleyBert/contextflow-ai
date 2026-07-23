@@ -45,9 +45,15 @@ como opção configurável via variável de ambiente, documentada no README, nun
       (`domain/entities/user.py`, `infrastructure/security/`, `application/services/auth_service.py`,
       `api/routes/auth.py`) — testado ponta a ponta via curl (registro, e-mail duplicado → 409,
       login, senha errada → 401, rota protegida `/me` com e sem token → 200/401)
-- [ ] CRUD de documentos (sem processamento de IA ainda)
-- [ ] CRUD de conversas
-- [ ] Integração simples com um LLM (pergunta → resposta, sem RAG ainda)
+- [x] CRUD de documentos (sem processamento de IA ainda) — upload (multipart), listar, buscar
+      por id, deletar; validação de tipo/tamanho; isolamento por dono testado (403 pra outro
+      usuário, 404 após deletar) (`application/services/document_service.py`,
+      `infrastructure/storage/local_storage.py`, `api/routes/documents.py`)
+- [x] CRUD de conversas — criar, listar, histórico de mensagens; isolamento por dono testado
+      (`application/services/conversation_service.py`, `api/routes/conversations.py`)
+- [x] Integração simples com um LLM (pergunta → resposta, sem RAG ainda) — Strategy Ollama/OpenAI
+      (`domain/repositories/llm_client.py`, `infrastructure/ai/`), testado de ponta a ponta com
+      Ollama local rodando de verdade (modelo `llama3.2:1b`)
 - [x] Versionamento `/api/v1`, tratamento padronizado de erros (`src/api/middlewares/error_handling.py`)
 - [x] Health check (`/health`) — testado, retorna `{"status":"ok"}`
 - [x] Documentação automática via Swagger — testado em `/docs`
@@ -131,3 +137,12 @@ _(Vamos registrando aqui decisões, trade-offs e coisas aprendidas ao longo do c
   endpoints `POST /auth/register`, `POST /auth/login`, `GET /auth/me` (protegida). Primeira
   migration real gerada via `alembic revision --autogenerate` e aplicada. Lint (Ruff) e
   type-check (MyPy strict) 100% limpos.
+- 2026-07-23: **Fase 1 concluída.** Ollama instalado via winget (modelo `llama3.2:1b`, ~1.3GB,
+  escolhido por ser leve o suficiente pra rodar bem localmente) pra testar a integração com IA
+  de verdade. CRUD de documentos (upload multipart validando tipo/tamanho, storage local em
+  disco via `LocalFileStorage`) e CRUD de conversas, ambos com isolamento por usuário dono
+  (403 ao tentar acessar recurso de outro usuário). Cliente de LLM com Strategy pattern
+  (`LLMClient` Protocol + `OllamaLLMClient`/`OpenAILLMClient`, escolhidos por `AI_PROVIDER`),
+  testado ponta a ponta: pergunta "qual a capital do Brasil?" → resposta correta do Ollama
+  local em ~7s. Todos os fluxos validados via curl (uploads, tipos inválidos, ownership,
+  conversas, mensagens). Lint e type-check seguem limpos.
