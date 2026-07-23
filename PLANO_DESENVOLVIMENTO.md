@@ -60,12 +60,23 @@ como opção configurável via variável de ambiente, documentada no README, nun
 
 ## Fase 2 — V2: RAG de verdade
 
-- [ ] Upload de PDF e extração de texto
-- [ ] Chunking de documentos
-- [ ] Geração de embeddings via camada de abstração de IA
-- [ ] pgvector: armazenamento e busca por similaridade
-- [ ] Pipeline RAG completo: pergunta → busca de contexto → resposta com fontes citadas
-- [ ] Re-ranking dos resultados recuperados
+- [x] Upload de PDF e extração de texto (`infrastructure/text/pdf_extractor.py`, via `pypdf`) —
+      testado com um PDF real gerado na hora, texto extraído corretamente
+- [x] Chunking de documentos (`infrastructure/text/chunker.py`, janela de caracteres com
+      sobreposição, hand-rolled em vez de depender de LangChain)
+- [x] Geração de embeddings via camada de abstração de IA — Strategy Ollama
+      (`nomic-embed-text`) / OpenAI (`domain/repositories/embedding_client.py`,
+      `infrastructure/ai/ollama_embedding_client.py` / `openai_embedding_client.py`)
+- [x] pgvector: armazenamento e busca por similaridade (coluna `Vector` via pacote `pgvector`,
+      busca por `cosine_distance`, escopada por usuário dono —
+      `infrastructure/repositories/document_chunk_repository.py`)
+- [x] Pipeline RAG completo: pergunta → busca de contexto → resposta com fontes citadas
+      (`application/services/rag_service.py`) — testado ponta a ponta: perguntas sobre fatos
+      exclusivos de um documento (.txt e .pdf) respondidas corretamente citando a fonte;
+      isolamento por usuário confirmado (outro usuário não recupera documentos alheios)
+- [x] Re-ranking dos resultados recuperados — léxico, misturando similaridade vetorial com
+      sobreposição de palavras-chave (`infrastructure/text/reranker.py`), sem depender de um
+      modelo de cross-encoder
 
 ## Fase 3 — V3: Processamento assíncrono
 
@@ -146,3 +157,18 @@ _(Vamos registrando aqui decisões, trade-offs e coisas aprendidas ao longo do c
   testado ponta a ponta: pergunta "qual a capital do Brasil?" → resposta correta do Ollama
   local em ~7s. Todos os fluxos validados via curl (uploads, tipos inválidos, ownership,
   conversas, mensagens). Lint e type-check seguem limpos.
+- 2026-07-23: **Fase 2 concluída.** Extração de PDF (`pypdf`), chunking hand-rolled (janela de
+  caracteres com sobreposição), embeddings via Strategy (Ollama `nomic-embed-text` local /
+  OpenAI), armazenamento vetorial no Postgres com a extensão `pgvector`
+  (`CREATE EXTENSION vector`, coluna `Vector(768)`, busca por `cosine_distance`), pipeline RAG
+  completo (`RAGService`) com re-ranking léxico de segundo estágio, e mensagens agora guardam
+  `sources` (documento + trecho usado) pra citação. Criado `ChatMessage`, um tipo leve separado
+  da entidade `Message` persistida, pra poder injetar uma instrução de sistema (contexto RAG)
+  numa chamada ao LLM sem isso virar uma linha de verdade na conversa. **Decisão técnica
+  importante:** o modelo `llama3.2:1b` (usado na Fase 1) é rápido mas fraco demais pra RAG —
+  ele ignorava o contexto fornecido e alucinava. Trocado pelo `llama3.2:3b` (~2GB), que segue
+  a instrução "responda só com base no contexto" de forma confiável. Testado ponta a ponta com
+  três fatos inventados (só existentes nos documentos de teste, um `.txt` e um `.pdf` gerado na
+  hora): todas as respostas corretas, citando a fonte certa. Confirmado isolamento por usuário
+  na busca vetorial (outro usuário não recupera documentos alheios, cai de volta pro
+  conhecimento geral do modelo). Lint e type-check seguem 100% limpos.

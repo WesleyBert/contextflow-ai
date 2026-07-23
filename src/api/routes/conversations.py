@@ -11,11 +11,23 @@ from src.api.schemas.conversation import (
     MessageCreateRequest,
     MessageExchangeResponse,
     MessageResponse,
+    MessageSourceResponse,
 )
 from src.application.services.conversation_service import ConversationService
+from src.domain.entities.conversation import Message
 from src.domain.entities.user import User
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
+
+
+def _to_message_response(message: Message) -> MessageResponse:
+    return MessageResponse(
+        id=message.id,
+        role=message.role,
+        content=message.content,
+        created_at=message.created_at,
+        sources=[MessageSourceResponse(**source.__dict__) for source in message.sources],
+    )
 
 
 @router.post("", response_model=ConversationResponse, status_code=status.HTTP_201_CREATED)
@@ -44,7 +56,7 @@ async def list_messages(
     conversation_service: Annotated[ConversationService, Depends(get_conversation_service)],
 ) -> list[MessageResponse]:
     messages = await conversation_service.get_messages(current_user.id, conversation_id)
-    return [MessageResponse(**m.__dict__) for m in messages]
+    return [_to_message_response(m) for m in messages]
 
 
 @router.post("/{conversation_id}/messages", response_model=MessageExchangeResponse)
@@ -58,6 +70,6 @@ async def send_message(
         current_user.id, conversation_id, body.content
     )
     return MessageExchangeResponse(
-        user_message=MessageResponse(**user_message.__dict__),
-        assistant_message=MessageResponse(**assistant_message.__dict__),
+        user_message=_to_message_response(user_message),
+        assistant_message=_to_message_response(assistant_message),
     )

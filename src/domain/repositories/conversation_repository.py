@@ -1,7 +1,7 @@
 from typing import Protocol
 from uuid import UUID
 
-from src.domain.entities.conversation import Conversation, Message, MessageRole
+from src.domain.entities.conversation import Conversation, Message, MessageRole, MessageSource
 
 
 class ConversationRepository(Protocol):
@@ -12,7 +12,11 @@ class ConversationRepository(Protocol):
     async def list_by_owner(self, owner_id: UUID) -> list[Conversation]: ...
 
     async def add_message(
-        self, conversation_id: UUID, role: MessageRole, content: str
+        self,
+        conversation_id: UUID,
+        role: MessageRole,
+        content: str,
+        sources: list[MessageSource] | None = None,
     ) -> Message: ...
 
     async def list_messages(self, conversation_id: UUID) -> list[Message]: ...

@@ -20,9 +20,16 @@ class Settings(BaseSettings):
 
     ai_provider: Literal["ollama", "openai"] = "ollama"
     ollama_base_url: str = "http://localhost:11434"
-    ollama_model: str = "llama3.2:1b"
+    ollama_model: str = "llama3.2:3b"
+    ollama_embedding_model: str = "nomic-embed-text"
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
+    openai_embedding_model: str = "text-embedding-3-small"
+
+    # dimensão do vetor salvo no pgvector. nomic-embed-text (Ollama) = 768,
+    # text-embedding-3-small (OpenAI) = 1536 — trocar de provedor exige nova
+    # migration se a dimensão mudar (limitação conhecida, documentada no README).
+    embedding_dim: int = 768
 
     upload_dir: str = "./uploads"
     max_upload_size_bytes: int = 20 * 1024 * 1024
@@ -31,6 +38,11 @@ class Settings(BaseSettings):
         "text/plain",
         "text/markdown",
     )
+
+    chunk_size_chars: int = 800
+    chunk_overlap_chars: int = 150
+    rag_retrieval_top_k: int = 20
+    rag_context_top_k: int = 5
 
 
 @lru_cache

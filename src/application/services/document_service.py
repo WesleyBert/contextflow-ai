@@ -1,5 +1,6 @@
 from uuid import UUID
 
+from src.application.services.document_processing_service import DocumentProcessingService
 from src.domain.entities.document import Document
 from src.domain.exceptions.base import ForbiddenError, NotFoundError, ValidationError
 from src.domain.repositories.document_repository import DocumentRepository
@@ -8,9 +9,15 @@ from src.infrastructure.storage.local_storage import LocalFileStorage
 
 
 class DocumentService:
-    def __init__(self, document_repository: DocumentRepository, storage: LocalFileStorage) -> None:
+    def __init__(
+        self,
+        document_repository: DocumentRepository,
+        storage: LocalFileStorage,
+        processing_service: DocumentProcessingService,
+    ) -> None:
         self._documents = document_repository
         self._storage = storage
+        self._processing = processing_service
 
     async def upload_document(
         self, owner_id: UUID, filename: str, content_type: str, content: bytes
@@ -24,13 +31,17 @@ class DocumentService:
 
         storage_path = self._storage.save(owner_id, filename, content)
 
-        return await self._documents.create(
+        document = await self._documents.create(
             owner_id=owner_id,
             filename=filename,
             content_type=content_type,
             size_bytes=len(content),
             storage_path=storage_path,
         )
+
+        await self._processing.process(document, content)
+
+        return document
 
     async def list_documents(self, owner_id: UUID) -> list[Document]:
         return await self._documents.list_by_owner(owner_id)
@@ -45,5 +56,6 @@ class DocumentService:
 
     async def delete_document(self, owner_id: UUID, document_id: UUID) -> None:
         document = await self.get_document(owner_id, document_id)
+        await self._processing.delete_chunks(document.id)
         self._storage.delete(document.storage_path)
         await self._documents.delete(document.id)

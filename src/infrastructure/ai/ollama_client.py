@@ -1,15 +1,15 @@
 import httpx
 
-from src.domain.entities.conversation import Message
+from src.domain.entities.chat_message import ChatMessage
 from src.infrastructure.config import get_settings
 
 
 class OllamaLLMClient:
-    async def generate_reply(self, history: list[Message]) -> str:
+    async def generate_reply(self, messages: list[ChatMessage]) -> str:
         settings = get_settings()
         payload = {
             "model": settings.ollama_model,
-            "messages": [{"role": m.role, "content": m.content} for m in history],
+            "messages": [{"role": m.role, "content": m.content} for m in messages],
             "stream": False,
         }
 

@@ -1,17 +1,17 @@
 from uuid import UUID
 
+from src.application.services.rag_service import RAGService
 from src.domain.entities.conversation import Conversation, Message
 from src.domain.exceptions.base import ForbiddenError, NotFoundError
 from src.domain.repositories.conversation_repository import ConversationRepository
-from src.domain.repositories.llm_client import LLMClient
 
 
 class ConversationService:
     def __init__(
-        self, conversation_repository: ConversationRepository, llm_client: LLMClient
+        self, conversation_repository: ConversationRepository, rag_service: RAGService
     ) -> None:
         self._conversations = conversation_repository
-        self._llm = llm_client
+        self._rag = rag_service
 
     async def create_conversation(self, owner_id: UUID, title: str) -> Conversation:
         return await self._conversations.create(owner_id=owner_id, title=title)
@@ -38,11 +38,13 @@ class ConversationService:
 
         user_message = await self._conversations.add_message(conversation_id, "user", content)
 
-        history = await self._conversations.list_messages(conversation_id)
-        reply_content = await self._llm.generate_reply(history)
+        history_before = await self._conversations.list_messages(conversation_id)
+        history_before = history_before[:-1]  # exclui a mensagem recém-criada acima
+
+        reply_content, sources = await self._rag.answer(owner_id, history_before, content)
 
         assistant_message = await self._conversations.add_message(
-            conversation_id, "assistant", reply_content
+            conversation_id, "assistant", reply_content, sources=sources
         )
 
         return user_message, assistant_message

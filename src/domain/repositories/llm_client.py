@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from src.domain.entities.conversation import Message
+from src.domain.entities.chat_message import ChatMessage
 
 
 class LLMClient(Protocol):
@@ -10,4 +10,4 @@ class LLMClient(Protocol):
     configuração (AI_PROVIDER no .env), não de reescrever código.
     """
 
-    async def generate_reply(self, history: list[Message]) -> str: ...
+    async def generate_reply(self, messages: list[ChatMessage]) -> str: ...

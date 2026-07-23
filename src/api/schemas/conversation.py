@@ -18,10 +18,18 @@ class MessageCreateRequest(BaseModel):
     content: str = Field(min_length=1)
 
 
+class MessageSourceResponse(BaseModel):
+    document_id: UUID
+    document_filename: str
+    chunk_index: int
+    snippet: str
+
+
 class MessageResponse(BaseModel):
     id: UUID
     role: str
     content: str
+    sources: list[MessageSourceResponse] = []
     created_at: datetime
 
 

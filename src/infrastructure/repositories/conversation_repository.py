@@ -3,7 +3,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.domain.entities.conversation import Conversation, Message, MessageRole
+from src.domain.entities.conversation import Conversation, Message, MessageRole, MessageSource
 from src.infrastructure.database.models.conversation import ConversationModel, MessageModel
 
 
@@ -16,6 +16,15 @@ def _conversation_to_entity(model: ConversationModel) -> Conversation:
     )
 
 
+def _source_to_entity(source: dict[str, object]) -> MessageSource:
+    return MessageSource(
+        document_id=UUID(str(source["document_id"])),
+        document_filename=str(source["document_filename"]),
+        chunk_index=int(source["chunk_index"]),  # type: ignore[call-overload]
+        snippet=str(source["snippet"]),
+    )
+
+
 def _message_to_entity(model: MessageModel) -> Message:
     return Message(
         id=model.id,
@@ -23,6 +32,7 @@ def _message_to_entity(model: MessageModel) -> Message:
         role=model.role,  # type: ignore[arg-type]
         content=model.content,
         created_at=model.created_at,
+        sources=[_source_to_entity(source) for source in model.sources],
     )
 
 
@@ -49,8 +59,27 @@ class SqlAlchemyConversationRepository:
         )
         return [_conversation_to_entity(model) for model in result.scalars().all()]
 
-    async def add_message(self, conversation_id: UUID, role: MessageRole, content: str) -> Message:
-        model = MessageModel(conversation_id=conversation_id, role=role, content=content)
+    async def add_message(
+        self,
+        conversation_id: UUID,
+        role: MessageRole,
+        content: str,
+        sources: list[MessageSource] | None = None,
+    ) -> Message:
+        model = MessageModel(
+            conversation_id=conversation_id,
+            role=role,
+            content=content,
+            sources=[
+                {
+                    "document_id": str(source.document_id),
+                    "document_filename": source.document_filename,
+                    "chunk_index": source.chunk_index,
+                    "snippet": source.snippet,
+                }
+                for source in (sources or [])
+            ],
+        )
         self._session.add(model)
         await self._session.commit()
         await self._session.refresh(model)
