@@ -40,8 +40,11 @@ como opção configurável via variável de ambiente, documentada no README, nun
 - [x] Configuração via Pydantic Settings (`src/infrastructure/config.py`)
 - [x] Engine assíncrono SQLAlchemy + `get_db()` dependency (`src/infrastructure/database/session.py`)
 - [x] Alembic configurado (template async), ligado às Settings e ao `Base.metadata`
-- [ ] Primeira migration real (depende de ter ao menos o model `User` e do Postgres rodando)
-- [ ] Autenticação: registro, login, JWT (access + refresh token), hash de senha
+- [x] Primeira migration real — tabela `users` criada no Postgres (`alembic/versions/8ef8b24e0113_*.py`)
+- [x] Autenticação: registro, login, JWT (access + refresh token), hash de senha
+      (`domain/entities/user.py`, `infrastructure/security/`, `application/services/auth_service.py`,
+      `api/routes/auth.py`) — testado ponta a ponta via curl (registro, e-mail duplicado → 409,
+      login, senha errada → 401, rota protegida `/me` com e sem token → 200/401)
 - [ ] CRUD de documentos (sem processamento de IA ainda)
 - [ ] CRUD de conversas
 - [ ] Integração simples com um LLM (pergunta → resposta, sem RAG ainda)
@@ -119,5 +122,12 @@ _(Vamos registrando aqui decisões, trade-offs e coisas aprendidas ao longo do c
   (`/api/v1/health` → 200) e Swagger testado (`/docs` → 200). Alembic configurado (template
   async) e testado — a conexão falhou por falta de Postgres local (esperado, sem Docker
   instalado nesta máquina), mas confirmou que a configuração está correta.
-  **Pendente:** instalar Docker Desktop para subir Postgres/Redis e continuar com models,
-  primeira migration e autenticação.
+- 2026-07-23: Docker Desktop instalado e funcionando (precisou habilitar virtualização na
+  BIOS/UEFI e instalar o WSL2 via `wsl --install`, rodando como administrador). Postgres
+  (pgvector) e Redis sobem via `docker compose up -d`. Camada de auth completa: entidade de
+  domínio `User`, `UserRepository` como Protocol (inversão de dependência), implementação
+  SQLAlchemy, hash de senha com `bcrypt` (trocado de `passlib` por incompatibilidade
+  conhecida com bcrypt novo), JWT (access + refresh) com `python-jose`, `AuthService`,
+  endpoints `POST /auth/register`, `POST /auth/login`, `GET /auth/me` (protegida). Primeira
+  migration real gerada via `alembic revision --autogenerate` e aplicada. Lint (Ruff) e
+  type-check (MyPy strict) 100% limpos.

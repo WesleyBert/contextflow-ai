@@ -23,7 +23,9 @@ def _error_response(status_code: int, message: str) -> JSONResponse:
 def register_exception_handlers(app: FastAPI) -> None:
     for exception_type, status_code in _STATUS_BY_EXCEPTION.items():
 
-        def _handler(_request: Request, exc: Exception, status_code: int = status_code) -> JSONResponse:
+        def _handler(
+            _request: Request, exc: Exception, status_code: int = status_code
+        ) -> JSONResponse:
             return _error_response(status_code, str(exc))
 
         app.add_exception_handler(exception_type, _handler)
