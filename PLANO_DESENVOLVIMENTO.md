@@ -123,7 +123,10 @@ como opção configurável via variável de ambiente, documentada no README, nun
       `total`, `page`, `page_size`, `pages`) via `page`/`page_size` (padrão 20, máx 100)
 - [x] IDs com UUID — já era o padrão desde a Fase 1 em todas as entidades
 - [ ] Idempotência em operações importantes
-- [ ] Logs estruturados
+- [x] Logs estruturados — JSON puro (sem lib externa) em `infrastructure/logging.py`,
+      correlação por `request_id` (API, via `ContextVar` + middleware) e `task_id`
+      (worker, `document_id` também). Substitui de fato o echo do SQLAlchemy: as
+      mesmas linhas de SQL agora saem como JSON em vez de texto puro
 - [ ] Métricas e tratamento centralizado de erros (o tratamento de erros em si já é
       centralizado desde a Fase 1 — `api/middlewares/error_handling.py` — falta só métricas)
 - [x] GitHub Actions: lint, type-check e testes no CI (`.github/workflows/ci.yml`)
@@ -289,3 +292,39 @@ _(Vamos registrando aqui decisões, trade-offs e coisas aprendidas ao longo do c
   sentido de documentos/conversas. Testado com Postgres real (paginação, filtro por
   status/busca, ordenação nos dois repositórios) e validado manualmente contra o servidor
   rodando de verdade. 113 testes, 95,75% de cobertura. Lint e type-check seguem 100% limpos.
+- 2026-07-31: **Logs estruturados.** `infrastructure/logging.py`: `JsonFormatter` (uma
+  linha JSON por evento — timestamp, level, logger, message, mais qualquer campo passado
+  via `extra=`) e `RequestIdFilter` (injeta o `request_id` da requisição atual, via
+  `ContextVar`, em todo LogRecord que não tenha um explícito). Como todo logger filho
+  propaga pro root por padrão, isso vale pra qualquer `logging.getLogger(__name__)` do
+  projeto sem precisar configurar nada por módulo. `RequestLoggingMiddleware`
+  (`api/middlewares/request_logging.py`) é ASGI puro, não `BaseHTTPMiddleware` — que
+  bufferiza a resposta pra poder inspecioná-la, o que quebraria o streaming do SSE em
+  `/documents/{id}/status/stream`; aqui só envelopa `send`, então cada chunk do SSE
+  continua passando direto. Gera (ou ecoa, se o cliente já mandou) um `X-Request-ID`,
+  loga uma linha "request completed" com method/path/status_code/duration_ms ao final.
+  Worker: `process_document_task` virou `bind=True` pra logar com `task_id` (via
+  `self.request.id`) e `document_id` no início/sucesso/falha do processamento, com
+  duração; `celery_app.conf.worker_hijack_root_logger = False` pra impedir o Celery de
+  reconfigurar o root logger por cima do nosso na hora que o worker sobe.
+  **Duas armadilhas de integração, achadas testando manualmente com servidor e worker
+  reais (não apareceram nos testes automatizados, que não passam pelo bootstrap completo
+  dos processos):** (1) o engine do SQLAlchemy (`echo=True`) anexa o próprio handler de
+  texto puro no logger `sqlalchemy.engine.Engine` na hora em que é criado, *se* esse
+  logger ainda não tiver nenhum handler — resultado: toda linha de SQL saía duplicada
+  (uma em texto puro do handler do SQLAlchemy, outra em JSON via propagação pro root).
+  A ordem de criação do engine em relação ao `configure_logging()` é diferente na API
+  (engine já existe quando `create_app()` roda, por causa da cadeia de imports dos
+  routers) e no worker (o `include=[...]` do Celery importa `tasks.py` — e por tabela
+  `session.py`, criando o engine — só depois do próprio `celery_app.py` já ter chamado
+  `configure_logging()`), então corrigir só num sentido (limpar o handler depois de
+  criado) resolvia a API e quebrava o worker. Resolvido de um jeito independente de
+  ordem: anexar um `NullHandler` nesse logger dentro de `configure_logging()`, que
+  simultaneamente impede o SQLAlchemy de anexar o handler dele (`if not
+  self.logger.handlers`) e limpa o que já tiver sido anexado antes. (2) o access log
+  embutido do uvicorn duplicava a mesma informação do nosso "request completed" com
+  menos contexto — desligado via `logging.getLogger("uvicorn.access").disabled = True`.
+  Validado manualmente com API e worker reais rodando ao mesmo tempo: nenhuma linha de
+  texto puro sobrou, `request_id`/`task_id`/`document_id` corretos em cada log, upload
+  → processamento rastreável ponta a ponta pelos dois ids. 123 testes, 95,93% de
+  cobertura. Lint e type-check seguem 100% limpos.

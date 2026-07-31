@@ -9,6 +9,7 @@ class Settings(BaseSettings):
 
     app_env: Literal["development", "test", "production"] = "development"
     secret_key: str = "changeme"
+    log_level: str = "INFO"
 
     database_url: str = "postgresql+asyncpg://contextflow:contextflow@localhost:5432/contextflow"
 
