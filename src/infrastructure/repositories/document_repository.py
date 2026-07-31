@@ -1,10 +1,19 @@
+from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.entities.document import Document, DocumentStatus
+from src.domain.repositories.document_repository import DocumentOrderBy
 from src.infrastructure.database.models.document import DocumentModel
+
+_ORDER_COLUMNS: dict[DocumentOrderBy, ColumnElement[Any]] = {
+    "created_at_desc": DocumentModel.created_at.desc(),
+    "created_at_asc": DocumentModel.created_at.asc(),
+    "filename_asc": DocumentModel.filename.asc(),
+    "filename_desc": DocumentModel.filename.desc(),
+}
 
 
 def _to_entity(model: DocumentModel) -> Document:
@@ -48,13 +57,35 @@ class SqlAlchemyDocumentRepository:
         model = await self._session.get(DocumentModel, document_id)
         return _to_entity(model) if model else None
 
-    async def list_by_owner(self, owner_id: UUID) -> list[Document]:
+    async def list_by_owner(
+        self,
+        owner_id: UUID,
+        *,
+        status: DocumentStatus | None = None,
+        search: str | None = None,
+        order_by: DocumentOrderBy = "created_at_desc",
+        limit: int = 20,
+        offset: int = 0,
+    ) -> tuple[list[Document], int]:
+        filters = [DocumentModel.owner_id == owner_id]
+        if status is not None:
+            filters.append(DocumentModel.status == status)
+        if search:
+            filters.append(DocumentModel.filename.ilike(f"%{search}%"))
+
+        total = await self._session.scalar(
+            select(func.count()).select_from(DocumentModel).where(*filters)
+        )
+
         result = await self._session.execute(
             select(DocumentModel)
-            .where(DocumentModel.owner_id == owner_id)
-            .order_by(DocumentModel.created_at.desc())
+            .where(*filters)
+            .order_by(_ORDER_COLUMNS[order_by])
+            .limit(limit)
+            .offset(offset)
         )
-        return [_to_entity(model) for model in result.scalars().all()]
+        documents = [_to_entity(model) for model in result.scalars().all()]
+        return documents, total or 0
 
     async def delete(self, document_id: UUID) -> None:
         model = await self._session.get(DocumentModel, document_id)

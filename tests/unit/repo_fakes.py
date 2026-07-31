@@ -8,6 +8,8 @@ from src.domain.entities.conversation import Conversation, Message, MessageRole,
 from src.domain.entities.document import Document, DocumentStatus
 from src.domain.entities.document_chunk import DocumentChunk, RetrievedChunk
 from src.domain.entities.user import User
+from src.domain.repositories.conversation_repository import ConversationOrderBy
+from src.domain.repositories.document_repository import DocumentOrderBy
 
 
 class FakeDocumentRepository:
@@ -38,8 +40,28 @@ class FakeDocumentRepository:
     async def get_by_id(self, document_id: UUID) -> Document | None:
         return self.documents.get(document_id)
 
-    async def list_by_owner(self, owner_id: UUID) -> list[Document]:
-        return [d for d in self.documents.values() if d.owner_id == owner_id]
+    async def list_by_owner(
+        self,
+        owner_id: UUID,
+        *,
+        status: DocumentStatus | None = None,
+        search: str | None = None,
+        order_by: DocumentOrderBy = "created_at_desc",
+        limit: int = 20,
+        offset: int = 0,
+    ) -> tuple[list[Document], int]:
+        matching = [d for d in self.documents.values() if d.owner_id == owner_id]
+        if status is not None:
+            matching = [d for d in matching if d.status == status]
+        if search:
+            matching = [d for d in matching if search.lower() in d.filename.lower()]
+
+        reverse = order_by.endswith("_desc")
+        sort_key = (lambda d: d.created_at) if "created_at" in order_by else (lambda d: d.filename)
+        matching.sort(key=sort_key, reverse=reverse)
+
+        total = len(matching)
+        return matching[offset : offset + limit], total
 
     async def delete(self, document_id: UUID) -> None:
         self.documents.pop(document_id, None)
@@ -92,8 +114,25 @@ class FakeConversationRepository:
     async def get_by_id(self, conversation_id: UUID) -> Conversation | None:
         return self.conversations.get(conversation_id)
 
-    async def list_by_owner(self, owner_id: UUID) -> list[Conversation]:
-        return [c for c in self.conversations.values() if c.owner_id == owner_id]
+    async def list_by_owner(
+        self,
+        owner_id: UUID,
+        *,
+        search: str | None = None,
+        order_by: ConversationOrderBy = "created_at_desc",
+        limit: int = 20,
+        offset: int = 0,
+    ) -> tuple[list[Conversation], int]:
+        matching = [c for c in self.conversations.values() if c.owner_id == owner_id]
+        if search:
+            matching = [c for c in matching if search.lower() in c.title.lower()]
+
+        reverse = order_by.endswith("_desc")
+        sort_key = (lambda c: c.created_at) if "created_at" in order_by else (lambda c: c.title)
+        matching.sort(key=sort_key, reverse=reverse)
+
+        total = len(matching)
+        return matching[offset : offset + limit], total
 
     async def add_message(
         self,

@@ -1,9 +1,9 @@
 from uuid import UUID
 
 from src.application.services.document_processing_service import DocumentProcessingService
-from src.domain.entities.document import Document
+from src.domain.entities.document import Document, DocumentStatus
 from src.domain.exceptions.base import ForbiddenError, NotFoundError, ValidationError
-from src.domain.repositories.document_repository import DocumentRepository
+from src.domain.repositories.document_repository import DocumentOrderBy, DocumentRepository
 from src.domain.repositories.task_queue import TaskQueue
 from src.infrastructure.config import get_settings
 from src.infrastructure.storage.local_storage import LocalFileStorage
@@ -46,8 +46,24 @@ class DocumentService:
 
         return document
 
-    async def list_documents(self, owner_id: UUID) -> list[Document]:
-        return await self._documents.list_by_owner(owner_id)
+    async def list_documents(
+        self,
+        owner_id: UUID,
+        *,
+        status: DocumentStatus | None = None,
+        search: str | None = None,
+        order_by: DocumentOrderBy = "created_at_desc",
+        limit: int = 20,
+        offset: int = 0,
+    ) -> tuple[list[Document], int]:
+        return await self._documents.list_by_owner(
+            owner_id,
+            status=status,
+            search=search,
+            order_by=order_by,
+            limit=limit,
+            offset=offset,
+        )
 
     async def get_document(self, owner_id: UUID, document_id: UUID) -> Document:
         document = await self._documents.get_by_id(document_id)

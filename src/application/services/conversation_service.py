@@ -3,7 +3,10 @@ from uuid import UUID
 from src.application.services.rag_service import RAGService
 from src.domain.entities.conversation import Conversation, Message
 from src.domain.exceptions.base import ForbiddenError, NotFoundError
-from src.domain.repositories.conversation_repository import ConversationRepository
+from src.domain.repositories.conversation_repository import (
+    ConversationOrderBy,
+    ConversationRepository,
+)
 
 
 class ConversationService:
@@ -16,8 +19,18 @@ class ConversationService:
     async def create_conversation(self, owner_id: UUID, title: str) -> Conversation:
         return await self._conversations.create(owner_id=owner_id, title=title)
 
-    async def list_conversations(self, owner_id: UUID) -> list[Conversation]:
-        return await self._conversations.list_by_owner(owner_id)
+    async def list_conversations(
+        self,
+        owner_id: UUID,
+        *,
+        search: str | None = None,
+        order_by: ConversationOrderBy = "created_at_desc",
+        limit: int = 20,
+        offset: int = 0,
+    ) -> tuple[list[Conversation], int]:
+        return await self._conversations.list_by_owner(
+            owner_id, search=search, order_by=order_by, limit=limit, offset=offset
+        )
 
     async def _get_owned_conversation(self, owner_id: UUID, conversation_id: UUID) -> Conversation:
         conversation = await self._conversations.get_by_id(conversation_id)

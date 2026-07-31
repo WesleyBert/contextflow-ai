@@ -15,7 +15,60 @@ async def test_create_and_list_conversations(client: AsyncClient) -> None:
 
     list_response = await client.get("/api/v1/conversations", headers=auth_headers(token))
     assert list_response.status_code == 200
-    assert [c["title"] for c in list_response.json()] == ["Minha conversa"]
+    body = list_response.json()
+    assert [c["title"] for c in body["items"]] == ["Minha conversa"]
+    assert body["total"] == 1
+
+
+async def test_list_conversations_paginates_and_orders_by_title(client: AsyncClient) -> None:
+    token, _ = await register_and_login(client)
+    for title in ("Charlie", "Alpha", "Bravo"):
+        await client.post(
+            "/api/v1/conversations", headers=auth_headers(token), json={"title": title}
+        )
+
+    response = await client.get(
+        "/api/v1/conversations",
+        headers=auth_headers(token),
+        params={"page": 1, "page_size": 2, "order_by": "title_asc"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 3
+    assert body["pages"] == 2
+    assert [c["title"] for c in body["items"]] == ["Alpha", "Bravo"]
+
+
+async def test_list_conversations_filters_by_title_search(client: AsyncClient) -> None:
+    token, _ = await register_and_login(client)
+    await client.post(
+        "/api/v1/conversations",
+        headers=auth_headers(token),
+        json={"title": "Dúvidas sobre contrato"},
+    )
+    await client.post(
+        "/api/v1/conversations", headers=auth_headers(token), json={"title": "Resumo de reunião"}
+    )
+
+    response = await client.get(
+        "/api/v1/conversations", headers=auth_headers(token), params={"q": "contrato"}
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    assert body["items"][0]["title"] == "Dúvidas sobre contrato"
+
+
+async def test_list_conversations_rejects_invalid_order_by(client: AsyncClient) -> None:
+    token, _ = await register_and_login(client)
+
+    response = await client.get(
+        "/api/v1/conversations", headers=auth_headers(token), params={"order_by": "chutometro"}
+    )
+
+    assert response.status_code == 422
 
 
 async def test_create_conversation_requires_authentication(client: AsyncClient) -> None:

@@ -99,8 +99,93 @@ async def test_list_documents_returns_only_own_documents(client: AsyncClient) ->
     response = await client.get("/api/v1/documents", headers=auth_headers(token_a))
 
     assert response.status_code == 200
-    filenames = [d["filename"] for d in response.json()]
+    body = response.json()
+    assert body["total"] == 1
+    filenames = [d["filename"] for d in body["items"]]
     assert filenames == ["meu.txt"]
+
+
+async def test_list_documents_paginates(client: AsyncClient) -> None:
+    token, _ = await register_and_login(client)
+    for i in range(3):
+        await _upload_txt(client, token, filename=f"doc-{i}.txt")
+
+    response = await client.get(
+        "/api/v1/documents",
+        headers=auth_headers(token),
+        params={"page": 1, "page_size": 2, "order_by": "filename_asc"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 3
+    assert body["page"] == 1
+    assert body["page_size"] == 2
+    assert body["pages"] == 2
+    assert [d["filename"] for d in body["items"]] == ["doc-0.txt", "doc-1.txt"]
+
+
+async def test_list_documents_filters_by_status(
+    client: AsyncClient, inline_task_queue: InlineTaskQueue
+) -> None:
+    token, _ = await register_and_login(client)
+    await _upload_txt(client, token, filename="fica-pronto.txt")
+    await inline_task_queue.run_pending()  # processa só o que já foi enfileirado até aqui
+    await _upload_txt(client, token, filename="fica-pendente.txt")
+
+    response = await client.get(
+        "/api/v1/documents", headers=auth_headers(token), params={"status": "ready"}
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    assert body["items"][0]["filename"] == "fica-pronto.txt"
+
+
+async def test_list_documents_filters_by_filename_search(client: AsyncClient) -> None:
+    token, _ = await register_and_login(client)
+    await _upload_txt(client, token, filename="relatorio-financeiro.txt")
+    await _upload_txt(client, token, filename="ata-reuniao.txt")
+
+    response = await client.get(
+        "/api/v1/documents", headers=auth_headers(token), params={"q": "financeiro"}
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    assert body["items"][0]["filename"] == "relatorio-financeiro.txt"
+
+
+async def test_list_documents_rejects_invalid_order_by(client: AsyncClient) -> None:
+    token, _ = await register_and_login(client)
+
+    response = await client.get(
+        "/api/v1/documents", headers=auth_headers(token), params={"order_by": "chutometro"}
+    )
+
+    assert response.status_code == 422
+
+
+async def test_list_documents_rejects_page_size_above_limit(client: AsyncClient) -> None:
+    token, _ = await register_and_login(client)
+
+    response = await client.get(
+        "/api/v1/documents", headers=auth_headers(token), params={"page_size": 101}
+    )
+
+    assert response.status_code == 422
+
+
+async def test_list_documents_rejects_page_below_one(client: AsyncClient) -> None:
+    token, _ = await register_and_login(client)
+
+    response = await client.get(
+        "/api/v1/documents", headers=auth_headers(token), params={"page": 0}
+    )
+
+    assert response.status_code == 422
 
 
 async def test_get_document_returns_document_for_owner(client: AsyncClient) -> None:

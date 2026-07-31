@@ -28,9 +28,40 @@ async def test_list_by_owner_returns_only_owner_conversations(db_session: AsyncS
     await repository.create(owner_id, "Minha")
     await repository.create(other_owner_id, "De outro")
 
-    conversations = await repository.list_by_owner(owner_id)
+    conversations, total = await repository.list_by_owner(owner_id)
 
     assert [c.title for c in conversations] == ["Minha"]
+    assert total == 1
+
+
+async def test_list_by_owner_paginates_and_orders_by_title(db_session: AsyncSession) -> None:
+    repository = SqlAlchemyConversationRepository(db_session)
+    owner_id = await create_test_user(db_session)
+    for title in ("Charlie", "Alpha", "Bravo"):
+        await repository.create(owner_id, title)
+
+    first_page, total = await repository.list_by_owner(
+        owner_id, order_by="title_asc", limit=2, offset=0
+    )
+    second_page, _ = await repository.list_by_owner(
+        owner_id, order_by="title_asc", limit=2, offset=2
+    )
+
+    assert total == 3
+    assert [c.title for c in first_page] == ["Alpha", "Bravo"]
+    assert [c.title for c in second_page] == ["Charlie"]
+
+
+async def test_list_by_owner_filters_by_title_search(db_session: AsyncSession) -> None:
+    repository = SqlAlchemyConversationRepository(db_session)
+    owner_id = await create_test_user(db_session)
+    await repository.create(owner_id, "Dúvidas sobre contrato")
+    await repository.create(owner_id, "Resumo de reunião")
+
+    conversations, total = await repository.list_by_owner(owner_id, search="contrato")
+
+    assert total == 1
+    assert conversations[0].title == "Dúvidas sobre contrato"
 
 
 async def test_add_message_and_list_messages_in_order(db_session: AsyncSession) -> None:

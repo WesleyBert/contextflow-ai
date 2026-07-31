@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 
 from src.api.dependencies.auth import get_current_user
 from src.api.dependencies.conversations import get_conversation_service
@@ -13,9 +13,11 @@ from src.api.schemas.conversation import (
     MessageResponse,
     MessageSourceResponse,
 )
+from src.api.schemas.pagination import Page
 from src.application.services.conversation_service import ConversationService
 from src.domain.entities.conversation import Message
 from src.domain.entities.user import User
+from src.domain.repositories.conversation_repository import ConversationOrderBy
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
@@ -40,13 +42,28 @@ async def create_conversation(
     return ConversationResponse(**conversation.__dict__)
 
 
-@router.get("", response_model=list[ConversationResponse])
+@router.get("", response_model=Page[ConversationResponse])
 async def list_conversations(
     current_user: Annotated[User, Depends(get_current_user)],
     conversation_service: Annotated[ConversationService, Depends(get_conversation_service)],
-) -> list[ConversationResponse]:
-    conversations = await conversation_service.list_conversations(current_user.id)
-    return [ConversationResponse(**c.__dict__) for c in conversations]
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+    q: Annotated[str | None, Query(max_length=255)] = None,
+    order_by: Annotated[ConversationOrderBy, Query()] = "created_at_desc",
+) -> Page[ConversationResponse]:
+    conversations, total = await conversation_service.list_conversations(
+        current_user.id,
+        search=q,
+        order_by=order_by,
+        limit=page_size,
+        offset=(page - 1) * page_size,
+    )
+    return Page.of(
+        items=[ConversationResponse(**c.__dict__) for c in conversations],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.get("/{conversation_id}/messages", response_model=list[MessageResponse])

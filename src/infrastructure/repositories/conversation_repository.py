@@ -1,10 +1,19 @@
+from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.entities.conversation import Conversation, Message, MessageRole, MessageSource
+from src.domain.repositories.conversation_repository import ConversationOrderBy
 from src.infrastructure.database.models.conversation import ConversationModel, MessageModel
+
+_ORDER_COLUMNS: dict[ConversationOrderBy, ColumnElement[Any]] = {
+    "created_at_desc": ConversationModel.created_at.desc(),
+    "created_at_asc": ConversationModel.created_at.asc(),
+    "title_asc": ConversationModel.title.asc(),
+    "title_desc": ConversationModel.title.desc(),
+}
 
 
 def _conversation_to_entity(model: ConversationModel) -> Conversation:
@@ -51,13 +60,32 @@ class SqlAlchemyConversationRepository:
         model = await self._session.get(ConversationModel, conversation_id)
         return _conversation_to_entity(model) if model else None
 
-    async def list_by_owner(self, owner_id: UUID) -> list[Conversation]:
+    async def list_by_owner(
+        self,
+        owner_id: UUID,
+        *,
+        search: str | None = None,
+        order_by: ConversationOrderBy = "created_at_desc",
+        limit: int = 20,
+        offset: int = 0,
+    ) -> tuple[list[Conversation], int]:
+        filters = [ConversationModel.owner_id == owner_id]
+        if search:
+            filters.append(ConversationModel.title.ilike(f"%{search}%"))
+
+        total = await self._session.scalar(
+            select(func.count()).select_from(ConversationModel).where(*filters)
+        )
+
         result = await self._session.execute(
             select(ConversationModel)
-            .where(ConversationModel.owner_id == owner_id)
-            .order_by(ConversationModel.created_at.desc())
+            .where(*filters)
+            .order_by(_ORDER_COLUMNS[order_by])
+            .limit(limit)
+            .offset(offset)
         )
-        return [_conversation_to_entity(model) for model in result.scalars().all()]
+        conversations = [_conversation_to_entity(model) for model in result.scalars().all()]
+        return conversations, total or 0
 
     async def add_message(
         self,

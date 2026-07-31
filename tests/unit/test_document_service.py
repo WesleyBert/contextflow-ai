@@ -121,9 +121,10 @@ async def test_list_documents_returns_only_owner_documents(
         owner_id=uuid4(), filename="de-outro.txt", content_type="text/plain", content=b"b"
     )
 
-    documents = await document_service.list_documents(owner_id)
+    documents, total = await document_service.list_documents(owner_id)
 
     assert [d.filename for d in documents] == ["meu.txt"]
+    assert total == 1
 
 
 async def test_delete_document_removes_chunks_file_and_record(

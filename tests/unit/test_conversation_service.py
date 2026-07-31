@@ -33,9 +33,10 @@ async def test_create_and_list_conversations(conversation_service: ConversationS
     owner_id = uuid4()
     await conversation_service.create_conversation(owner_id, "Minha conversa")
 
-    conversations = await conversation_service.list_conversations(owner_id)
+    conversations, total = await conversation_service.list_conversations(owner_id)
 
     assert [c.title for c in conversations] == ["Minha conversa"]
+    assert total == 1
 
 
 async def test_get_messages_raises_not_found_for_unknown_conversation(

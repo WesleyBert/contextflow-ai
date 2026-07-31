@@ -116,7 +116,11 @@ como opção configurável via variável de ambiente, documentada no README, nun
       (`DocumentService.upload_document`), coberta por teste desde a Fase 3
 - [x] Controle de acesso: usuário não acessa documento de outro usuário — já existia desde
       a Fase 1 (`ForbiddenError` em `get_document`/`delete_document`), coberto por teste
-- [ ] Paginação, filtros e ordenação nos endpoints de listagem
+- [x] Paginação, filtros e ordenação nos endpoints de listagem — `GET /documents`
+      (filtro por `status` e busca por `q` no filename, `order_by` created_at/filename
+      asc/desc) e `GET /conversations` (busca por `q` no título, `order_by`
+      created_at/title asc/desc); resposta paginada (`Page[T]` genérico: `items`,
+      `total`, `page`, `page_size`, `pages`) via `page`/`page_size` (padrão 20, máx 100)
 - [x] IDs com UUID — já era o padrão desde a Fase 1 em todas as entidades
 - [ ] Idempotência em operações importantes
 - [ ] Logs estruturados
@@ -266,3 +270,22 @@ _(Vamos registrando aqui decisões, trade-offs e coisas aprendidas ao longo do c
   IP falso entre testes. Os testes de rate limiting de verdade sobem sua própria instância
   da app com o `RedisRateLimiter` real, e limpam as chaves usadas antes/depois. 99 testes,
   96% de cobertura. Lint e type-check seguem 100% limpos.
+- 2026-07-31: **Paginação, filtros e ordenação.** `GET /documents` e `GET /conversations`
+  agora aceitam `page`/`page_size` (padrão 20, máximo 100), devolvendo um envelope `Page[T]`
+  genérico (`api/schemas/pagination.py`: `items`, `total`, `page`, `page_size`, `pages`) em
+  vez de uma lista crua — mudança que quebra o formato de resposta desses dois endpoints
+  (aceitável nesse estágio do projeto, sem consumidores externos ainda). Documentos: filtro
+  por `status` (usa o alias `status` no query param pra não colidir com o `status` do
+  FastAPI já importado nas rotas — o parâmetro em si chama `document_status`) e busca por
+  `q` no filename (`ILIKE`); `order_by` com `created_at`/`filename` × `asc`/`desc`.
+  Conversas: busca por `q` no título; `order_by` com `created_at`/`title` × `asc`/`desc`.
+  `DocumentRepository.list_by_owner`/`ConversationRepository.list_by_owner` mudaram de
+  `list[T]` pra `tuple[list[T], int]` (itens da página + contagem total via `COUNT(*)`
+  com os mesmos filtros) — Protocol, implementação SQLAlchemy, services e todos os
+  fakes/testes que dependiam da assinatura antiga foram atualizados juntos. Decisão
+  consciente de escopo: `GET /conversations/{id}/messages` ficou de fora da paginação por
+  ora — histórico de conversa costuma ser consumido inteiro (ou via scroll incremental,
+  um padrão diferente de paginação por página), não é um "endpoint de listagem" no mesmo
+  sentido de documentos/conversas. Testado com Postgres real (paginação, filtro por
+  status/busca, ordenação nos dois repositórios) e validado manualmente contra o servidor
+  rodando de verdade. 113 testes, 95,75% de cobertura. Lint e type-check seguem 100% limpos.

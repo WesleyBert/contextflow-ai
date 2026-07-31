@@ -4,15 +4,18 @@ from collections.abc import AsyncIterator
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, UploadFile, status
+from fastapi import APIRouter, Depends, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
 
 from src.api.dependencies.auth import get_current_user
 from src.api.dependencies.documents import get_document_service
 from src.api.dependencies.rate_limit import rate_limit_upload
 from src.api.schemas.document import DocumentResponse, DocumentStatusResponse
+from src.api.schemas.pagination import Page
 from src.application.services.document_service import DocumentService
+from src.domain.entities.document import DocumentStatus
 from src.domain.entities.user import User
+from src.domain.repositories.document_repository import DocumentOrderBy
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -38,13 +41,30 @@ async def upload_document(
     return DocumentResponse(**document.__dict__)
 
 
-@router.get("", response_model=list[DocumentResponse])
+@router.get("", response_model=Page[DocumentResponse])
 async def list_documents(
     current_user: Annotated[User, Depends(get_current_user)],
     document_service: Annotated[DocumentService, Depends(get_document_service)],
-) -> list[DocumentResponse]:
-    documents = await document_service.list_documents(current_user.id)
-    return [DocumentResponse(**d.__dict__) for d in documents]
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+    document_status: Annotated[DocumentStatus | None, Query(alias="status")] = None,
+    q: Annotated[str | None, Query(max_length=255)] = None,
+    order_by: Annotated[DocumentOrderBy, Query()] = "created_at_desc",
+) -> Page[DocumentResponse]:
+    documents, total = await document_service.list_documents(
+        current_user.id,
+        status=document_status,
+        search=q,
+        order_by=order_by,
+        limit=page_size,
+        offset=(page - 1) * page_size,
+    )
+    return Page.of(
+        items=[DocumentResponse(**d.__dict__) for d in documents],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.get("/{document_id}", response_model=DocumentResponse)
