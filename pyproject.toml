@@ -51,6 +51,13 @@ exclude = ["alembic/versions/"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+# Escopo de sessão único: o engine assíncrono do SQLAlchemy é um singleton de módulo
+# (compartilhado com a app), e suas conexões do pool ficam presas ao event loop em que
+# nasceram. Com o escopo padrão "function" (loop novo por teste), a segunda função de
+# teste reusaria uma conexão presa ao loop já fechado do teste anterior e quebraria
+# (mesma causa-raiz do bug corrigido em infrastructure/queue/tasks.py).
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
 
 [build-system]
 requires = ["setuptools>=68"]

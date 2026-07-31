@@ -86,13 +86,26 @@ como opção configurável via variável de ambiente, documentada no README, nun
       (acoplado ao documento, não a uma task genérica; mais simples pro cliente,
       que já teria que buscar o documento de qualquer forma)
 - [x] SSE para status em tempo real (`GET /api/v1/documents/{id}/status/stream`)
-- [ ] Testes unitários dos services
-- [ ] Testes de integração da API
-- [ ] Testes dos repositórios
-- [ ] Mock da API de IA nos testes
-- [ ] Testes de autenticação e permissões
-- [ ] Testes de erros e entradas inválidas
-- [ ] Cobertura de testes em torno de 80%
+- [x] Testes unitários dos services (`tests/unit/test_auth_service.py`,
+      `test_document_service.py`, `test_document_processing_service.py`,
+      `test_conversation_service.py`, `test_rag_service.py`)
+- [x] Testes de integração da API (`tests/integration/test_auth_routes.py`,
+      `test_documents_routes.py`, `test_conversations_routes.py`, `test_health.py`),
+      incluindo upload → status pending → worker roda → status ready, e o endpoint SSE
+- [x] Testes dos repositórios, contra Postgres real (banco `contextflow_test` dedicado,
+      criado automaticamente e isolado por transação com rollback por teste) —
+      `tests/integration/test_document_repository.py`, `test_document_chunk_repository.py`
+      (inclui busca por similaridade via pgvector), `test_conversation_repository.py`,
+      `test_user_repository.py`
+- [x] Mock da API de IA nos testes (`tests/fakes.py`: `FakeEmbeddingClient` determinístico
+      por hash, `FakeLLMClient`) — nenhum teste depende de Ollama/OpenAI rodando
+- [x] Testes de autenticação e permissões (registro/login, token inválido/ausente/tipo
+      errado, usuário do token não existe mais, ownership 403/404 em documentos e
+      conversas)
+- [x] Testes de erros e entradas inválidas (tipo/tamanho de arquivo, senha curta, título
+      vazio, e2e de falha de processamento levando o documento a `status="failed"`)
+- [x] Cobertura de testes: 95% em `src/` (meta era ~80%) — os 5% restantes são
+      adaptadores finos de rede (Ollama/OpenAI clients) já validados manualmente
 
 ## Fase 4 — V4: Nível produção
 
@@ -189,5 +202,28 @@ _(Vamos registrando aqui decisões, trade-offs e coisas aprendidas ao longo do c
   ao loop já fechado da task anterior (`AttributeError` dentro do asyncpg). Corrigido com
   `await engine.dispose()` num `finally` ao fim de cada task, forçando conexões novas no loop
   seguinte. Reproduzido com uploads em sequência antes e depois da correção pra confirmar.
-  Lint e type-check seguem 100% limpos. Ainda faltam os testes automatizados da Fase 3
-  (unitários, integração, mocks de IA) — próximo passo.
+  Lint e type-check seguem 100% limpos.
+- 2026-07-31: **Fase 3 (parte 2) concluída — testes automatizados.** 96 testes, 95% de
+  cobertura em `src/`. Infra em `tests/conftest.py`: `DATABASE_URL` redirecionado pra um
+  banco `contextflow_test` dedicado (criado automaticamente, extensão `vector` habilitada),
+  isolamento por teste via transação com `SAVEPOINT` (rollback no final, mesmo com `commit()`
+  no meio do teste — `join_transaction_mode` padrão do SQLAlchemy 2.0 cobre isso). Duplos em
+  `tests/fakes.py`: `FakeEmbeddingClient` (determinístico via hash) e `FakeLLMClient`, nenhum
+  teste depende de Ollama/OpenAI rodando; `InlineTaskQueue` substitui o Celery — enfileira só
+  registra o id, e o teste chama `run_pending()` explicitamente, o que também deixou testável
+  a transição `pending` → (worker roda) → `ready`/`failed` sem subir Redis.
+  **Bug de infraestrutura de teste encontrado e corrigido:** com `pytest-asyncio` no escopo
+  padrão (`function`, um event loop novo por teste), o `engine` do SQLAlchemy — singleton de
+  módulo — quebrava no segundo teste que tocasse o banco, com "Future attached to a different
+  loop": basicamente a mesma causa-raiz do bug do worker Celery corrigido na parte 1, só que
+  entre testes em vez de entre tasks. Resolvido configurando
+  `asyncio_default_fixture_loop_scope = "session"` e `asyncio_default_test_loop_scope =
+  "session"` no `pyproject.toml`, pra todos os testes assíncronos compartilharem um loop só.
+  Teste de regressão dedicado (`tests/integration/test_tasks.py`) chama a task Celery direto
+  — sem `.delay()`, sem precisar do Redis — rodando-a de verdade em threads separadas via
+  `asyncio.to_thread` (cada uma com seu próprio `asyncio.run()`, igual a duas execuções
+  sucessivas de worker); validado removendo o `engine.dispose()` temporariamente e confirmando
+  que o teste quebra do jeito esperado antes de restaurar a correção. Cobertura restante fora
+  dos 95% é majoritariamente os adaptadores finos de rede (`ollama_client.py`,
+  `openai_client.py` e os de embedding) — não mockados propositalmente, já validados
+  manualmente ponta a ponta nas Fases 1–3. Lint e type-check seguem 100% limpos.
