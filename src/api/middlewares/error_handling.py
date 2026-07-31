@@ -5,6 +5,7 @@ from src.domain.exceptions.base import (
     AlreadyExistsError,
     ForbiddenError,
     NotFoundError,
+    RateLimitExceededError,
     UnauthorizedError,
     ValidationError,
 )
@@ -15,6 +16,7 @@ _STATUS_BY_EXCEPTION = {
     UnauthorizedError: status.HTTP_401_UNAUTHORIZED,
     ForbiddenError: status.HTTP_403_FORBIDDEN,
     ValidationError: status.HTTP_422_UNPROCESSABLE_CONTENT,
+    RateLimitExceededError: status.HTTP_429_TOO_MANY_REQUESTS,
 }
 
 

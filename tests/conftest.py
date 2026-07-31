@@ -26,12 +26,18 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession  # noqa: E402
 
 from src.api.dependencies.db import get_db  # noqa: E402
 from src.api.dependencies.documents import get_task_queue  # noqa: E402
+from src.api.dependencies.rate_limit import get_rate_limiter  # noqa: E402
 from src.infrastructure.ai.factory import get_embedding_client, get_llm_client  # noqa: E402
 from src.infrastructure.config import get_settings  # noqa: E402
 from src.infrastructure.database.session import Base, engine  # noqa: E402
 from src.infrastructure.repositories.user_repository import SqlAlchemyUserRepository  # noqa: E402
 from src.main import create_app  # noqa: E402
-from tests.fakes import FakeEmbeddingClient, FakeLLMClient, InlineTaskQueue  # noqa: E402
+from tests.fakes import (  # noqa: E402
+    FakeEmbeddingClient,
+    FakeLLMClient,
+    FakeRateLimiter,
+    InlineTaskQueue,
+)
 
 
 async def _ensure_test_database_exists() -> None:
@@ -121,6 +127,7 @@ async def client(
     app.dependency_overrides[get_embedding_client] = lambda: fake_embedding_client
     app.dependency_overrides[get_llm_client] = lambda: fake_llm_client
     app.dependency_overrides[get_task_queue] = lambda: inline_task_queue
+    app.dependency_overrides[get_rate_limiter] = lambda: FakeRateLimiter()
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as async_client:

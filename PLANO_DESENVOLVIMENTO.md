@@ -109,7 +109,9 @@ como opção configurável via variável de ambiente, documentada no README, nun
 
 ## Fase 4 — V4: Nível produção
 
-- [ ] Rate limiting
+- [x] Rate limiting — janela fixa no Redis (`RateLimiter` Protocol +
+      `RedisRateLimiter`), aplicado em `/auth/register` e `/auth/login` (por IP,
+      contadores independentes por rota) e em `POST /documents` (por usuário)
 - [x] Validação de tipo e tamanho de arquivo — já existia desde a Fase 1
       (`DocumentService.upload_document`), coberta por teste desde a Fase 3
 - [x] Controle de acesso: usuário não acessa documento de outro usuário — já existia desde
@@ -243,3 +245,24 @@ _(Vamos registrando aqui decisões, trade-offs e coisas aprendidas ao longo do c
   de acesso, IDs UUID) — não foi trabalho novo, só reconhecimento do que já estava feito.
   Próximos itens em aberto na Fase 4: rate limiting, paginação/filtros, idempotência, logs
   estruturados, métricas, avaliação de respostas e tela administrativa.
+- 2026-07-31: **Rate limiting.** Janela fixa contada no Redis (`INCR` + `EXPIRE` na
+  primeira ocorrência da chave), seguindo o mesmo molde Protocol + implementação já usado
+  em `TaskQueue`/`EmbeddingClient`: `RateLimiter` (`domain/repositories/rate_limiter.py`) +
+  `RedisRateLimiter` (`infrastructure/rate_limit/`). Aplicado como dependência do FastAPI
+  (`api/dependencies/rate_limit.py`) via `dependencies=[Depends(...)]` nas rotas, sem
+  poluir a assinatura das funções: `rate_limit_auth` protege `/auth/register` e
+  `/auth/login` por IP (chave inclui o path, então esgotar o limite de registro não afeta
+  login), `rate_limit_upload` protege `POST /documents` por usuário (cada upload dispara
+  processamento de IA — custa tempo de CPU/GPU e, com OpenAI, dinheiro de verdade). Limites
+  configuráveis via Settings (`RATE_LIMIT_*` no `.env`), 5/60s pra auth e 10/60s pra upload
+  por padrão. Nova exceção `RateLimitExceededError` → 429, registrada no mapa central de
+  `error_handling.py`. Testado com o `RedisRateLimiter` de verdade (Redis local) em
+  `tests/integration/test_rate_limiting.py`, e manualmente contra o servidor rodando de
+  verdade (6 tentativas de login errado: as 5 primeiras 401, a 6ª 429). **Detalhe de
+  design nos testes:** o `client` padrão em conftest.py passou a sobrescrever
+  `get_rate_limiter` com um fake que nunca limita — confirmei que `request.client.host`
+  é sempre `"127.0.0.1"` sob o `ASGITransport` do httpx, então sem esse fake qualquer
+  teste com várias chamadas de auth/upload esbarraria no limite por compartilhar o mesmo
+  IP falso entre testes. Os testes de rate limiting de verdade sobem sua própria instância
+  da app com o `RedisRateLimiter` real, e limpam as chaves usadas antes/depois. 99 testes,
+  96% de cobertura. Lint e type-check seguem 100% limpos.

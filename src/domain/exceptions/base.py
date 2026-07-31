@@ -20,3 +20,7 @@ class ForbiddenError(DomainError):
 
 class ValidationError(DomainError):
     """Entrada do usuário viola uma regra de negócio (ex.: arquivo de tipo não suportado)."""
+
+
+class RateLimitExceededError(DomainError):
+    """Cliente excedeu o número de requisições permitido numa janela de tempo."""

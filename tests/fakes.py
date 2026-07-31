@@ -13,6 +13,7 @@ from src.application.services.document_processing_service import DocumentProcess
 from src.domain.entities.chat_message import ChatMessage
 from src.domain.repositories.embedding_client import EmbeddingClient
 from src.domain.repositories.llm_client import LLMClient
+from src.domain.repositories.rate_limiter import RateLimiter
 from src.infrastructure.repositories.document_chunk_repository import (
     SqlAlchemyDocumentChunkRepository,
 )
@@ -53,6 +54,15 @@ class FakeLLMClient(LLMClient):
             return self._reply
         last_user_message = next(m for m in reversed(messages) if m.role == "user")
         return f"[resposta fake] {last_user_message.content}"
+
+
+class FakeRateLimiter(RateLimiter):
+    """Nunca limita — usado como override padrão pros testes que não são sobre rate
+    limiting (senão qualquer teste que faz várias chamadas de auth/upload esbarraria
+    no limite, já que todas as requisições de teste compartilham o mesmo IP falso)."""
+
+    async def check(self, key: str, limit: int, window_seconds: int) -> bool:
+        return True
 
 
 class InlineTaskQueue:

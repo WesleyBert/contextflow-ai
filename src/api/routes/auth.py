@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, status
 
 from src.api.dependencies.auth import get_auth_service, get_current_user
+from src.api.dependencies.rate_limit import rate_limit_auth
 from src.api.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserResponse
 from src.application.services.auth_service import AuthService
 from src.domain.entities.user import User
@@ -11,7 +12,12 @@ from src.infrastructure.security.jwt import create_access_token, create_refresh_
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/register",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit_auth)],
+)
 async def register(
     body: RegisterRequest,
     auth_service: Annotated[AuthService, Depends(get_auth_service)],
@@ -19,7 +25,7 @@ async def register(
     return await auth_service.register_user(email=body.email, password=body.password)
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", response_model=TokenResponse, dependencies=[Depends(rate_limit_auth)])
 async def login(
     body: LoginRequest,
     auth_service: Annotated[AuthService, Depends(get_auth_service)],

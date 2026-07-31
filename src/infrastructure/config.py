@@ -44,6 +44,14 @@ class Settings(BaseSettings):
     rag_retrieval_top_k: int = 20
     rag_context_top_k: int = 5
 
+    # janelas fixas (fixed window) contadas no Redis — protege login/registro contra
+    # força bruta e upload contra abuso (cada upload dispara processamento de IA, que
+    # custa tempo de CPU/GPU e, no caso do provedor OpenAI, dinheiro de verdade)
+    rate_limit_auth_requests: int = 5
+    rate_limit_auth_window_seconds: int = 60
+    rate_limit_upload_requests: int = 10
+    rate_limit_upload_window_seconds: int = 60
+
 
 @lru_cache
 def get_settings() -> Settings:

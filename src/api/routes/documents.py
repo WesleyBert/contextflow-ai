@@ -9,6 +9,7 @@ from fastapi.responses import StreamingResponse
 
 from src.api.dependencies.auth import get_current_user
 from src.api.dependencies.documents import get_document_service
+from src.api.dependencies.rate_limit import rate_limit_upload
 from src.api.schemas.document import DocumentResponse, DocumentStatusResponse
 from src.application.services.document_service import DocumentService
 from src.domain.entities.user import User
@@ -16,7 +17,12 @@ from src.domain.entities.user import User
 router = APIRouter(prefix="/documents", tags=["documents"])
 
 
-@router.post("", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=DocumentResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit_upload)],
+)
 async def upload_document(
     file: UploadFile,
     current_user: Annotated[User, Depends(get_current_user)],
