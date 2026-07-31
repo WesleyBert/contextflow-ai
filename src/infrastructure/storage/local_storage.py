@@ -26,3 +26,6 @@ class LocalFileStorage:
         path = Path(storage_path)
         if path.exists():
             path.unlink()
+
+    def read(self, storage_path: str) -> bytes:
+        return Path(storage_path).read_bytes()

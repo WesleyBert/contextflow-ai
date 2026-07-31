@@ -3,7 +3,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.domain.entities.document import Document
+from src.domain.entities.document import Document, DocumentStatus
 from src.infrastructure.database.models.document import DocumentModel
 
 
@@ -15,6 +15,7 @@ def _to_entity(model: DocumentModel) -> Document:
         content_type=model.content_type,
         size_bytes=model.size_bytes,
         storage_path=model.storage_path,
+        status=model.status,  # type: ignore[arg-type]
         created_at=model.created_at,
     )
 
@@ -59,4 +60,10 @@ class SqlAlchemyDocumentRepository:
         model = await self._session.get(DocumentModel, document_id)
         if model is not None:
             await self._session.delete(model)
+            await self._session.commit()
+
+    async def update_status(self, document_id: UUID, status: DocumentStatus) -> None:
+        model = await self._session.get(DocumentModel, document_id)
+        if model is not None:
+            model.status = status
             await self._session.commit()

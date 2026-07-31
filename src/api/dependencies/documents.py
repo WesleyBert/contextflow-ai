@@ -9,12 +9,18 @@ from src.application.services.document_service import DocumentService
 from src.domain.repositories.document_chunk_repository import DocumentChunkRepository
 from src.domain.repositories.document_repository import DocumentRepository
 from src.domain.repositories.embedding_client import EmbeddingClient
+from src.domain.repositories.task_queue import TaskQueue
 from src.infrastructure.ai.factory import get_embedding_client
+from src.infrastructure.queue.celery_task_queue import CeleryTaskQueue
 from src.infrastructure.repositories.document_chunk_repository import (
     SqlAlchemyDocumentChunkRepository,
 )
 from src.infrastructure.repositories.document_repository import SqlAlchemyDocumentRepository
 from src.infrastructure.storage.local_storage import LocalFileStorage
+
+
+def get_task_queue() -> TaskQueue:
+    return CeleryTaskQueue()
 
 
 def get_document_repository(db: Annotated[AsyncSession, Depends(get_db)]) -> DocumentRepository:
@@ -39,5 +45,6 @@ def get_document_service(
     processing_service: Annotated[
         DocumentProcessingService, Depends(get_document_processing_service)
     ],
+    task_queue: Annotated[TaskQueue, Depends(get_task_queue)],
 ) -> DocumentService:
-    return DocumentService(document_repository, LocalFileStorage(), processing_service)
+    return DocumentService(document_repository, LocalFileStorage(), processing_service, task_queue)

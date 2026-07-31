@@ -11,9 +11,9 @@ from src.infrastructure.text.pdf_extractor import extract_text
 class DocumentProcessingService:
     """Extrai texto, divide em chunks e gera embeddings.
 
-    Hoje isso roda de forma síncrona dentro do próprio request de upload — na Fase 3
-    (processamento assíncrono) essa mesma lógica passa a rodar dentro de uma task Celery,
-    sem precisar mudar nada aqui, só quem chama.
+    Roda dentro de uma task Celery (worker separado), chamada por
+    src/infrastructure/queue/tasks.py. A lógica em si não sabe nada sobre
+    filas — só quem a chama mudou entre a Fase 2 (síncrono, no request) e a Fase 3.
     """
 
     def __init__(

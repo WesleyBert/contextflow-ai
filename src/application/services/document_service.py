@@ -4,6 +4,7 @@ from src.application.services.document_processing_service import DocumentProcess
 from src.domain.entities.document import Document
 from src.domain.exceptions.base import ForbiddenError, NotFoundError, ValidationError
 from src.domain.repositories.document_repository import DocumentRepository
+from src.domain.repositories.task_queue import TaskQueue
 from src.infrastructure.config import get_settings
 from src.infrastructure.storage.local_storage import LocalFileStorage
 
@@ -14,10 +15,12 @@ class DocumentService:
         document_repository: DocumentRepository,
         storage: LocalFileStorage,
         processing_service: DocumentProcessingService,
+        task_queue: TaskQueue,
     ) -> None:
         self._documents = document_repository
         self._storage = storage
         self._processing = processing_service
+        self._task_queue = task_queue
 
     async def upload_document(
         self, owner_id: UUID, filename: str, content_type: str, content: bytes
@@ -39,7 +42,7 @@ class DocumentService:
             storage_path=storage_path,
         )
 
-        await self._processing.process(document, content)
+        self._task_queue.enqueue_document_processing(document.id)
 
         return document
 

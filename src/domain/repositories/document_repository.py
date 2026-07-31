@@ -1,7 +1,7 @@
 from typing import Protocol
 from uuid import UUID
 
-from src.domain.entities.document import Document
+from src.domain.entities.document import Document, DocumentStatus
 
 
 class DocumentRepository(Protocol):
@@ -19,3 +19,5 @@ class DocumentRepository(Protocol):
     async def list_by_owner(self, owner_id: UUID) -> list[Document]: ...
 
     async def delete(self, document_id: UUID) -> None: ...
+
+    async def update_status(self, document_id: UUID, status: DocumentStatus) -> None: ...
