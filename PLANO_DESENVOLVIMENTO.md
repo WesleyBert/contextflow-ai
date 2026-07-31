@@ -110,13 +110,17 @@ como opção configurável via variável de ambiente, documentada no README, nun
 ## Fase 4 — V4: Nível produção
 
 - [ ] Rate limiting
-- [ ] Validação de tipo e tamanho de arquivo
-- [ ] Controle de acesso: usuário não acessa documento de outro usuário
+- [x] Validação de tipo e tamanho de arquivo — já existia desde a Fase 1
+      (`DocumentService.upload_document`), coberta por teste desde a Fase 3
+- [x] Controle de acesso: usuário não acessa documento de outro usuário — já existia desde
+      a Fase 1 (`ForbiddenError` em `get_document`/`delete_document`), coberto por teste
 - [ ] Paginação, filtros e ordenação nos endpoints de listagem
-- [ ] IDs com UUID, idempotência em operações importantes
+- [x] IDs com UUID — já era o padrão desde a Fase 1 em todas as entidades
+- [ ] Idempotência em operações importantes
 - [ ] Logs estruturados
-- [ ] Métricas e tratamento centralizado de erros
-- [ ] GitHub Actions: lint, type-check e testes no CI
+- [ ] Métricas e tratamento centralizado de erros (o tratamento de erros em si já é
+      centralizado desde a Fase 1 — `api/middlewares/error_handling.py` — falta só métricas)
+- [x] GitHub Actions: lint, type-check e testes no CI (`.github/workflows/ci.yml`)
 - [ ] Avaliação de respostas pelo usuário (👍/👎)
 - [ ] Tela administrativa: documentos processados, tempo médio de processamento,
       nº de perguntas, custo estimado de tokens, taxa de erro, tempo médio de resposta,
@@ -227,3 +231,15 @@ _(Vamos registrando aqui decisões, trade-offs e coisas aprendidas ao longo do c
   dos 95% é majoritariamente os adaptadores finos de rede (`ollama_client.py`,
   `openai_client.py` e os de embedding) — não mockados propositalmente, já validados
   manualmente ponta a ponta nas Fases 1–3. Lint e type-check seguem 100% limpos.
+- 2026-07-31: **Início da Fase 4 — CI no GitHub Actions.** `.github/workflows/ci.yml`: roda
+  `ruff check .`, `mypy src/` e `pytest --cov=src --cov-fail-under=80` a cada push/PR na
+  `main`, com Postgres (`pgvector/pgvector:pg16`) e Redis como service containers — os
+  mesmos parâmetros do `docker-compose.yml` local, então o `TEST_DATABASE_URL` padrão do
+  `conftest.py` funciona sem configuração extra. Validado rodando a sequência completa
+  (install limpo → ruff → mypy → pytest) num venv novo antes de commitar, pra não descobrir
+  problema de empacotamento só depois de rodar no GitHub; passou de primeira (96 testes,
+  95% de cobertura). Aproveitei pra marcar no checklist três itens da Fase 4 que já
+  existiam desde a Fase 1 e passaram a ter teste na Fase 3 (validação de arquivo, controle
+  de acesso, IDs UUID) — não foi trabalho novo, só reconhecimento do que já estava feito.
+  Próximos itens em aberto na Fase 4: rate limiting, paginação/filtros, idempotência, logs
+  estruturados, métricas, avaliação de respostas e tela administrativa.
