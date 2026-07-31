@@ -80,10 +80,12 @@ como opção configurável via variável de ambiente, documentada no README, nun
 
 ## Fase 3 — V3: Processamento assíncrono
 
-- [ ] Redis + Celery configurados no projeto
-- [ ] Worker dedicado: upload → extração → chunking → embeddings em background
-- [ ] Endpoint `GET /api/v1/tasks/{id}/status`
-- [ ] WebSocket ou SSE para status em tempo real
+- [x] Redis + Celery configurados no projeto
+- [x] Worker dedicado: upload → extração → chunking → embeddings em background
+- [x] Endpoint de status — implementado como `GET /api/v1/documents/{id}/status`
+      (acoplado ao documento, não a uma task genérica; mais simples pro cliente,
+      que já teria que buscar o documento de qualquer forma)
+- [x] SSE para status em tempo real (`GET /api/v1/documents/{id}/status/stream`)
 - [ ] Testes unitários dos services
 - [ ] Testes de integração da API
 - [ ] Testes dos repositórios
@@ -172,3 +174,20 @@ _(Vamos registrando aqui decisões, trade-offs e coisas aprendidas ao longo do c
   hora): todas as respostas corretas, citando a fonte certa. Confirmado isolamento por usuário
   na busca vetorial (outro usuário não recupera documentos alheios, cai de volta pro
   conhecimento geral do modelo). Lint e type-check seguem 100% limpos.
+- 2026-07-31: **Fase 3 (parte 1) concluída — processamento assíncrono.** Coluna `status`
+  (`pending`/`processing`/`ready`/`failed`) na entidade/model de documento + migration.
+  `TaskQueue` como Protocol (`domain/repositories/task_queue.py`) com implementação Celery
+  (`infrastructure/queue/`: `celery_app.py`, `celery_task_queue.py`, `tasks.py`).
+  `DocumentService.upload_document` agora só enfileira a task em vez de processar sync; o
+  worker roda `DocumentProcessingService` (mesma lógica da Fase 2, sem mudanças) e atualiza o
+  status ao longo do caminho. Endpoints `GET /documents/{id}/status` e SSE em
+  `/documents/{id}/status/stream`. Testado ponta a ponta com Postgres/Redis reais (Docker) e
+  Ollama local: upload → `pending` → `processing` → `ready`, chunk e embedding gravados.
+  **Bug encontrado e corrigido:** o `engine` assíncrono do SQLAlchemy é um singleton de módulo
+  compartilhado entre API e worker; como cada task Celery roda `asyncio.run()` (loop novo a
+  cada chamada), a segunda task em diante quebrava tentando reusar uma conexão do pool presa
+  ao loop já fechado da task anterior (`AttributeError` dentro do asyncpg). Corrigido com
+  `await engine.dispose()` num `finally` ao fim de cada task, forçando conexões novas no loop
+  seguinte. Reproduzido com uploads em sequência antes e depois da correção pra confirmar.
+  Lint e type-check seguem 100% limpos. Ainda faltam os testes automatizados da Fase 3
+  (unitários, integração, mocks de IA) — próximo passo.
