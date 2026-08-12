@@ -4,12 +4,20 @@ unitários dos services — sem tocar banco, pra isolar a lógica de aplicação
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from src.domain.entities.conversation import Conversation, Message, MessageRole, MessageSource
+from src.domain.entities.ai_interaction import AiInteraction
+from src.domain.entities.conversation import (
+    Conversation,
+    Message,
+    MessageFeedback,
+    MessageRole,
+    MessageSource,
+)
 from src.domain.entities.document import Document, DocumentStatus
 from src.domain.entities.document_chunk import DocumentChunk, RetrievedChunk
 from src.domain.entities.user import User
+from src.domain.repositories.ai_interaction_repository import ChatStats, ModelUsage
 from src.domain.repositories.conversation_repository import ConversationOrderBy
-from src.domain.repositories.document_repository import DocumentOrderBy
+from src.domain.repositories.document_repository import DocumentOrderBy, DocumentProcessingStats
 
 
 class FakeDocumentRepository:
@@ -66,7 +74,14 @@ class FakeDocumentRepository:
     async def delete(self, document_id: UUID) -> None:
         self.documents.pop(document_id, None)
 
-    async def update_status(self, document_id: UUID, status: DocumentStatus) -> None:
+    async def update_status(
+        self,
+        document_id: UUID,
+        status: DocumentStatus,
+        *,
+        started_at: datetime | None = None,
+        finished_at: datetime | None = None,
+    ) -> None:
         document = self.documents[document_id]
         self.documents[document_id] = Document(
             id=document.id,
@@ -77,6 +92,22 @@ class FakeDocumentRepository:
             storage_path=document.storage_path,
             status=status,
             created_at=document.created_at,
+            processing_started_at=started_at or document.processing_started_at,
+            processing_finished_at=finished_at or document.processing_finished_at,
+        )
+
+    async def processing_stats(self) -> DocumentProcessingStats:
+        documents = list(self.documents.values())
+        ready = [d for d in documents if d.status == "ready"]
+        failed = [d for d in documents if d.status == "failed"]
+        durations = [
+            (d.processing_finished_at - d.processing_started_at).total_seconds() * 1000
+            for d in ready
+            if d.processing_started_at and d.processing_finished_at
+        ]
+        avg = sum(durations) / len(durations) if durations else None
+        return DocumentProcessingStats(
+            total=len(documents), ready=len(ready), failed=len(failed), avg_processing_time_ms=avg
         )
 
 
@@ -154,6 +185,88 @@ class FakeConversationRepository:
 
     async def list_messages(self, conversation_id: UUID) -> list[Message]:
         return list(self.messages.get(conversation_id, []))
+
+    async def get_message_by_id(self, message_id: UUID) -> Message | None:
+        for messages in self.messages.values():
+            for message in messages:
+                if message.id == message_id:
+                    return message
+        return None
+
+    async def set_message_feedback(
+        self, message_id: UUID, feedback: MessageFeedback
+    ) -> Message | None:
+        for messages in self.messages.values():
+            for index, message in enumerate(messages):
+                if message.id == message_id:
+                    updated = Message(
+                        id=message.id,
+                        conversation_id=message.conversation_id,
+                        role=message.role,
+                        content=message.content,
+                        created_at=message.created_at,
+                        sources=message.sources,
+                        feedback=feedback,
+                    )
+                    messages[index] = updated
+                    return updated
+        return None
+
+
+class FakeAiInteractionRepository:
+    def __init__(self) -> None:
+        self.interactions: list[AiInteraction] = []
+
+    async def create(
+        self,
+        owner_id: UUID,
+        conversation_id: UUID,
+        provider: str,
+        model: str,
+        prompt_tokens_estimate: int,
+        completion_tokens_estimate: int,
+        cost_estimate_usd: float,
+        duration_ms: float,
+        succeeded: bool,
+    ) -> AiInteraction:
+        interaction = AiInteraction(
+            id=uuid4(),
+            owner_id=owner_id,
+            conversation_id=conversation_id,
+            provider=provider,
+            model=model,
+            prompt_tokens_estimate=prompt_tokens_estimate,
+            completion_tokens_estimate=completion_tokens_estimate,
+            cost_estimate_usd=cost_estimate_usd,
+            duration_ms=duration_ms,
+            succeeded=succeeded,
+            created_at=datetime.now(UTC),
+        )
+        self.interactions.append(interaction)
+        return interaction
+
+    async def chat_stats(self) -> ChatStats:
+        succeeded = [i for i in self.interactions if i.succeeded]
+        durations = [i.duration_ms for i in succeeded]
+        avg = sum(durations) / len(durations) if durations else None
+        total_cost = sum(i.cost_estimate_usd for i in self.interactions)
+
+        counts: dict[tuple[str, str], int] = {}
+        for interaction in self.interactions:
+            key = (interaction.provider, interaction.model)
+            counts[key] = counts.get(key, 0) + 1
+        most_used = sorted(counts.items(), key=lambda item: item[1], reverse=True)
+
+        return ChatStats(
+            total=len(self.interactions),
+            succeeded=len(succeeded),
+            avg_duration_ms=avg,
+            total_cost_estimate_usd=total_cost,
+            most_used_models=[
+                ModelUsage(provider=provider, model=model, count=count)
+                for (provider, model), count in most_used
+            ],
+        )
 
 
 class FakeDocumentChunkRepository:

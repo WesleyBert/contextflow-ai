@@ -15,6 +15,7 @@ os.environ["DATABASE_URL"] = os.environ.get(
 )
 os.environ.setdefault("SECRET_KEY", "test-secret-key")
 os.environ.setdefault("JWT_SECRET_KEY", "test-jwt-secret-key")
+os.environ.setdefault("ADMIN_EMAILS", "admin@example.com")
 
 from collections.abc import AsyncIterator  # noqa: E402
 

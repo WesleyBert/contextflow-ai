@@ -122,18 +122,22 @@ como opção configurável via variável de ambiente, documentada no README, nun
       created_at/title asc/desc); resposta paginada (`Page[T]` genérico: `items`,
       `total`, `page`, `page_size`, `pages`) via `page`/`page_size` (padrão 20, máx 100)
 - [x] IDs com UUID — já era o padrão desde a Fase 1 em todas as entidades
-- [ ] Idempotência em operações importantes
+- [x] Idempotência em operações importantes — header `Idempotency-Key` (Redis, TTL
+      configurável), aplicado em `POST /documents` e `POST /conversations/{id}/messages`
 - [x] Logs estruturados — JSON puro (sem lib externa) em `infrastructure/logging.py`,
       correlação por `request_id` (API, via `ContextVar` + middleware) e `task_id`
       (worker, `document_id` também). Substitui de fato o echo do SQLAlchemy: as
       mesmas linhas de SQL agora saem como JSON em vez de texto puro
-- [ ] Métricas e tratamento centralizado de erros (o tratamento de erros em si já é
-      centralizado desde a Fase 1 — `api/middlewares/error_handling.py` — falta só métricas)
+- [x] Métricas e tratamento centralizado de erros (o tratamento de erros em si já é
+      centralizado desde a Fase 1 — `api/middlewares/error_handling.py`) — métricas via
+      `GET /metrics` no formato Prometheus (`prometheus-client`): contadores/histogramas
+      de requisições HTTP e de processamento de documento
 - [x] GitHub Actions: lint, type-check e testes no CI (`.github/workflows/ci.yml`)
-- [ ] Avaliação de respostas pelo usuário (👍/👎)
-- [ ] Tela administrativa: documentos processados, tempo médio de processamento,
+- [x] Avaliação de respostas pelo usuário (👍/👎) — `POST
+      /conversations/{id}/messages/{message_id}/feedback`, só em respostas da IA
+- [x] Tela administrativa: documentos processados, tempo médio de processamento,
       nº de perguntas, custo estimado de tokens, taxa de erro, tempo médio de resposta,
-      modelos de IA mais usados
+      modelos de IA mais usados — `GET /admin/metrics`, acesso restrito por `ADMIN_EMAILS`
 
 ## Fase 5 — Front-end (React + TypeScript)
 
@@ -328,3 +332,36 @@ _(Vamos registrando aqui decisões, trade-offs e coisas aprendidas ao longo do c
   texto puro sobrou, `request_id`/`task_id`/`document_id` corretos em cada log, upload
   → processamento rastreável ponta a ponta pelos dois ids. 123 testes, 95,93% de
   cobertura. Lint e type-check seguem 100% limpos.
+- 2026-08-12: **Fase 4 concluída** — os quatro itens que faltavam (idempotência, métricas,
+  avaliação de respostas, tela administrativa). **Idempotência:** header `Idempotency-Key`
+  opcional em `POST /documents` e `POST /conversations/{id}/messages` — as duas operações
+  que disparam processamento de IA (custo de tempo/dinheiro), então um retry do cliente com
+  a mesma chave devolve a resposta cacheada em vez de reprocessar. Cache simples no Redis
+  (`IdempotencyStore` Protocol + `RedisIdempotencyStore`, TTL configurável), reaproveitando o
+  mesmo Redis do rate limiter. **Métricas:** endpoint `GET /metrics` no formato Prometheus
+  (`prometheus-client`), contadores/histogramas de requisições HTTP (por método + rota +
+  status, hooked no `RequestLoggingMiddleware` já existente) e de processamento de documento
+  (hooked no worker). Usa o *template* da rota (`scope["route"].path`) como label, não o path
+  cru — evita explosão de cardinalidade por causa dos UUIDs nos paths de recurso.
+  **Avaliação de respostas:** `POST /conversations/{id}/messages/{message_id}/feedback`
+  (`rating: "up"|"down"`), só permitido em mensagens `role="assistant"` (`ValidationError`
+  em mensagem de usuário) — coluna `feedback` nullable em `messages`. **Tela administrativa:**
+  `GET /admin/metrics`, acesso restrito a e-mails listados em `ADMIN_EMAILS` (sem coluna nova
+  em `users` — decisão consciente de escopo, dá pra promover um usuário só editando o `.env`).
+  Duas fontes de dado novas: (1) colunas `processing_started_at`/`processing_finished_at` em
+  `documents`, preenchidas pelo worker nas transições de status, usadas pro tempo médio de
+  processamento; (2) tabela nova `ai_interactions`, um registro por pergunta respondida via
+  RAG (sucesso ou falha) com provider/modelo, tokens estimados, custo estimado e duração —
+  populada em `ConversationService.send_message`. **Decisão técnica importante:** nem Ollama
+  nem OpenAI devolvem contagem real de tokens pro `LLMClient` deste projeto, então tokens e
+  custo são estimados por heurística (`len(texto) // 4`, ~4 caracteres por token) — deixado
+  explícito no código e no nome dos campos (`*_estimate`) que não é uma cobrança real; preço
+  por 1k tokens configurável via `.env` (`TOKEN_PRICE_PER_1K_*_USD`), zero por padrão porque
+  o provedor padrão (Ollama) roda local e de graça. Uma única migration nova pros três itens
+  de schema (timestamps de documento, coluna de feedback, tabela `ai_interactions`). Validado
+  manualmente com API + worker + Ollama reais rodando: upload duas vezes com o mesmo
+  `Idempotency-Key` devolveu o mesmo documento; `/metrics` expôs as séries esperadas; feedback
+  gravado e refletido em `GET /messages`; `/admin/metrics` bloqueado (403) pra usuário comum e
+  liberado (200, com números batendo, inclusive tempo médio de processamento não-nulo depois
+  do worker rodar) pro e-mail configurado em `ADMIN_EMAILS`. 140 testes, 97% de cobertura em
+  `src/`. Lint e type-check seguem 100% limpos.

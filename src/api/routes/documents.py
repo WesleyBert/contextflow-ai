@@ -4,11 +4,12 @@ from collections.abc import AsyncIterator
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, UploadFile, status
+from fastapi import APIRouter, Depends, Header, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
 
 from src.api.dependencies.auth import get_current_user
 from src.api.dependencies.documents import get_document_service
+from src.api.dependencies.idempotency import get_idempotency_store
 from src.api.dependencies.rate_limit import rate_limit_upload
 from src.api.schemas.document import DocumentResponse, DocumentStatusResponse
 from src.api.schemas.pagination import Page
@@ -16,6 +17,8 @@ from src.application.services.document_service import DocumentService
 from src.domain.entities.document import DocumentStatus
 from src.domain.entities.user import User
 from src.domain.repositories.document_repository import DocumentOrderBy
+from src.domain.repositories.idempotency_store import IdempotencyStore
+from src.infrastructure.config import get_settings
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -30,7 +33,15 @@ async def upload_document(
     file: UploadFile,
     current_user: Annotated[User, Depends(get_current_user)],
     document_service: Annotated[DocumentService, Depends(get_document_service)],
+    idempotency_store: Annotated[IdempotencyStore, Depends(get_idempotency_store)],
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
 ) -> DocumentResponse:
+    cache_key = f"{current_user.id}:documents:{idempotency_key}" if idempotency_key else None
+    if cache_key:
+        cached = await idempotency_store.get(cache_key)
+        if cached:
+            return DocumentResponse.model_validate_json(cached)
+
     content = await file.read()
     document = await document_service.upload_document(
         owner_id=current_user.id,
@@ -38,7 +49,13 @@ async def upload_document(
         content_type=file.content_type or "application/octet-stream",
         content=content,
     )
-    return DocumentResponse(**document.__dict__)
+    response = DocumentResponse(**document.__dict__)
+
+    if cache_key:
+        await idempotency_store.set(
+            cache_key, response.model_dump_json(), get_settings().idempotency_ttl_seconds
+        )
+    return response
 
 
 @router.get("", response_model=Page[DocumentResponse])

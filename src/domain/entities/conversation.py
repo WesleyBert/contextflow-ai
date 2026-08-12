@@ -4,6 +4,7 @@ from typing import Literal
 from uuid import UUID
 
 MessageRole = Literal["user", "assistant"]
+MessageFeedback = Literal["up", "down"]
 
 
 @dataclass
@@ -33,3 +34,4 @@ class Message:
     content: str
     created_at: datetime
     sources: list[MessageSource] = field(default_factory=list)
+    feedback: MessageFeedback | None = None

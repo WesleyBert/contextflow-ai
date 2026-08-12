@@ -16,3 +16,5 @@ class Document:
     storage_path: str
     status: DocumentStatus
     created_at: datetime
+    processing_started_at: datetime | None = None
+    processing_finished_at: datetime | None = None

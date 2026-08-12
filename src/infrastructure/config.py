@@ -53,6 +53,20 @@ class Settings(BaseSettings):
     rate_limit_upload_requests: int = 10
     rate_limit_upload_window_seconds: int = 60
 
+    # cache de respostas por Idempotency-Key (Redis) — evita reprocessar upload ou
+    # rechamar o LLM se o cliente repetir a requisição com a mesma chave
+    idempotency_ttl_seconds: int = 86400
+
+    # preço por 1k tokens, usado só pra estimar custo no painel administrativo (não é
+    # cobrança real). Zero por padrão porque o provedor padrão (Ollama) roda local e de
+    # graça — configurar via .env pra refletir o preço do modelo OpenAI escolhido.
+    token_price_per_1k_prompt_usd: float = 0.0
+    token_price_per_1k_completion_usd: float = 0.0
+
+    # e-mails com acesso ao painel administrativo (GET /admin/metrics), separados por
+    # vírgula. Vazio por padrão — ninguém tem acesso até configurar explicitamente.
+    admin_emails: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:

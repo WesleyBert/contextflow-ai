@@ -1,9 +1,19 @@
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Literal, Protocol
 from uuid import UUID
 
 from src.domain.entities.document import Document, DocumentStatus
 
 DocumentOrderBy = Literal["created_at_desc", "created_at_asc", "filename_asc", "filename_desc"]
+
+
+@dataclass
+class DocumentProcessingStats:
+    total: int
+    ready: int
+    failed: int
+    avg_processing_time_ms: float | None
 
 
 class DocumentRepository(Protocol):
@@ -33,4 +43,13 @@ class DocumentRepository(Protocol):
 
     async def delete(self, document_id: UUID) -> None: ...
 
-    async def update_status(self, document_id: UUID, status: DocumentStatus) -> None: ...
+    async def update_status(
+        self,
+        document_id: UUID,
+        status: DocumentStatus,
+        *,
+        started_at: datetime | None = None,
+        finished_at: datetime | None = None,
+    ) -> None: ...
+
+    async def processing_stats(self) -> DocumentProcessingStats: ...

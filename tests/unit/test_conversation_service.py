@@ -6,8 +6,8 @@ import pytest
 from src.application.services.conversation_service import ConversationService
 from src.application.services.rag_service import RAGService
 from src.domain.entities.conversation import MessageSource
-from src.domain.exceptions.base import ForbiddenError, NotFoundError
-from tests.unit.repo_fakes import FakeConversationRepository
+from src.domain.exceptions.base import ForbiddenError, NotFoundError, ValidationError
+from tests.unit.repo_fakes import FakeAiInteractionRepository, FakeConversationRepository
 
 
 @pytest.fixture
@@ -23,10 +23,17 @@ def conversation_repository() -> FakeConversationRepository:
 
 
 @pytest.fixture
+def ai_interaction_repository() -> FakeAiInteractionRepository:
+    return FakeAiInteractionRepository()
+
+
+@pytest.fixture
 def conversation_service(
-    conversation_repository: FakeConversationRepository, rag_service: RAGService
+    conversation_repository: FakeConversationRepository,
+    rag_service: RAGService,
+    ai_interaction_repository: FakeAiInteractionRepository,
 ) -> ConversationService:
-    return ConversationService(conversation_repository, rag_service)
+    return ConversationService(conversation_repository, rag_service, ai_interaction_repository)
 
 
 async def test_create_and_list_conversations(conversation_service: ConversationService) -> None:
@@ -99,6 +106,38 @@ async def test_send_message_calls_rag_with_history_excluding_new_message(
     assert [m.content for m in history_arg] == ["pergunta antiga", "resposta antiga"]
 
 
+async def test_send_message_records_successful_ai_interaction(
+    conversation_service: ConversationService,
+    ai_interaction_repository: FakeAiInteractionRepository,
+) -> None:
+    owner_id = uuid4()
+    conversation = await conversation_service.create_conversation(owner_id, "Conversa")
+
+    await conversation_service.send_message(owner_id, conversation.id, "pergunta")
+
+    assert len(ai_interaction_repository.interactions) == 1
+    interaction = ai_interaction_repository.interactions[0]
+    assert interaction.succeeded is True
+    assert interaction.conversation_id == conversation.id
+    assert interaction.owner_id == owner_id
+
+
+async def test_send_message_records_failed_ai_interaction_and_reraises(
+    conversation_service: ConversationService,
+    ai_interaction_repository: FakeAiInteractionRepository,
+    rag_service: RAGService,
+) -> None:
+    owner_id = uuid4()
+    conversation = await conversation_service.create_conversation(owner_id, "Conversa")
+    rag_service.answer.side_effect = RuntimeError("falha no LLM")  # type: ignore[attr-defined]
+
+    with pytest.raises(RuntimeError):
+        await conversation_service.send_message(owner_id, conversation.id, "pergunta")
+
+    assert len(ai_interaction_repository.interactions) == 1
+    assert ai_interaction_repository.interactions[0].succeeded is False
+
+
 async def test_send_message_raises_forbidden_for_other_owner(
     conversation_service: ConversationService,
 ) -> None:
@@ -106,3 +145,59 @@ async def test_send_message_raises_forbidden_for_other_owner(
 
     with pytest.raises(ForbiddenError):
         await conversation_service.send_message(uuid4(), conversation.id, "oi")
+
+
+async def test_set_message_feedback_on_assistant_message(
+    conversation_service: ConversationService,
+) -> None:
+    owner_id = uuid4()
+    conversation = await conversation_service.create_conversation(owner_id, "Conversa")
+    _, assistant_message = await conversation_service.send_message(
+        owner_id, conversation.id, "pergunta"
+    )
+
+    updated = await conversation_service.set_message_feedback(
+        owner_id, conversation.id, assistant_message.id, "up"
+    )
+
+    assert updated.feedback == "up"
+
+
+async def test_set_message_feedback_rejects_user_message(
+    conversation_service: ConversationService,
+) -> None:
+    owner_id = uuid4()
+    conversation = await conversation_service.create_conversation(owner_id, "Conversa")
+    user_message, _ = await conversation_service.send_message(
+        owner_id, conversation.id, "pergunta"
+    )
+
+    with pytest.raises(ValidationError):
+        await conversation_service.set_message_feedback(
+            owner_id, conversation.id, user_message.id, "down"
+        )
+
+
+async def test_set_message_feedback_raises_not_found_for_unknown_message(
+    conversation_service: ConversationService,
+) -> None:
+    owner_id = uuid4()
+    conversation = await conversation_service.create_conversation(owner_id, "Conversa")
+
+    with pytest.raises(NotFoundError):
+        await conversation_service.set_message_feedback(owner_id, conversation.id, uuid4(), "up")
+
+
+async def test_set_message_feedback_raises_forbidden_for_other_owner(
+    conversation_service: ConversationService,
+) -> None:
+    owner_id = uuid4()
+    conversation = await conversation_service.create_conversation(owner_id, "Conversa")
+    _, assistant_message = await conversation_service.send_message(
+        owner_id, conversation.id, "pergunta"
+    )
+
+    with pytest.raises(ForbiddenError):
+        await conversation_service.set_message_feedback(
+            uuid4(), conversation.id, assistant_message.id, "up"
+        )

@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -30,9 +31,14 @@ class MessageResponse(BaseModel):
     role: str
     content: str
     sources: list[MessageSourceResponse] = []
+    feedback: Literal["up", "down"] | None = None
     created_at: datetime
 
 
 class MessageExchangeResponse(BaseModel):
     user_message: MessageResponse
     assistant_message: MessageResponse
+
+
+class MessageFeedbackRequest(BaseModel):
+    rating: Literal["up", "down"]

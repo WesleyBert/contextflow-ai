@@ -6,6 +6,7 @@ from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from src.infrastructure.logging import request_id_var
+from src.infrastructure.metrics import http_request_duration_seconds, http_requests_total
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,8 @@ class RequestLoggingMiddleware:
         try:
             await self.app(scope, receive, send_wrapper)
         finally:
-            duration_ms = round((time.perf_counter() - start) * 1000, 2)
+            duration_seconds = time.perf_counter() - start
+            duration_ms = round(duration_seconds * 1000, 2)
             logger.info(
                 "request completed",
                 extra={
@@ -52,6 +54,19 @@ class RequestLoggingMiddleware:
                     "duration_ms": duration_ms,
                 },
             )
+
+            # rota (com o `route` já resolvido pelo Router nesse ponto) em vez do path
+            # cru, senão cada UUID de recurso vira uma série própria no Prometheus
+            route = scope.get("route")
+            path_label = route.path if route is not None else scope["path"]
+            method = scope["method"]
+            http_requests_total.labels(
+                method=method, path=path_label, status_code=status_code
+            ).inc()
+            http_request_duration_seconds.labels(method=method, path=path_label).observe(
+                duration_seconds
+            )
+
             request_id_var.reset(token)
 
     @staticmethod

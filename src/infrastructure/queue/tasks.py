@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import time
+from datetime import UTC, datetime
 from uuid import UUID
 
 from celery import Task
@@ -8,6 +9,10 @@ from celery import Task
 from src.application.services.document_processing_service import DocumentProcessingService
 from src.infrastructure.ai.factory import get_embedding_client
 from src.infrastructure.database.session import async_session_maker, engine
+from src.infrastructure.metrics import (
+    document_processing_duration_seconds,
+    document_processing_total,
+)
 from src.infrastructure.queue.celery_app import celery_app
 from src.infrastructure.repositories.document_chunk_repository import (
     SqlAlchemyDocumentChunkRepository,
@@ -32,22 +37,33 @@ async def _process_document(document_id: UUID, task_id: str | None) -> None:
         start = time.perf_counter()
 
         try:
-            await document_repository.update_status(document_id, "processing")
+            await document_repository.update_status(
+                document_id, "processing", started_at=datetime.now(UTC)
+            )
 
             content = LocalFileStorage().read(document.storage_path)
             chunk_repository = SqlAlchemyDocumentChunkRepository(session)
             processing_service = DocumentProcessingService(chunk_repository, get_embedding_client())
             await processing_service.process(document, content)
 
-            await document_repository.update_status(document_id, "ready")
-            duration_ms = round((time.perf_counter() - start) * 1000, 2)
+            await document_repository.update_status(
+                document_id, "ready", finished_at=datetime.now(UTC)
+            )
+            duration_seconds = time.perf_counter() - start
+            duration_ms = round(duration_seconds * 1000, 2)
             logger.info(
                 "document processing succeeded",
                 extra={**log_context, "duration_ms": duration_ms},
             )
+            document_processing_total.labels(status="ready").inc()
+            document_processing_duration_seconds.observe(duration_seconds)
         except Exception:
-            await document_repository.update_status(document_id, "failed")
+            await document_repository.update_status(
+                document_id, "failed", finished_at=datetime.now(UTC)
+            )
             logger.exception("document processing failed", extra=log_context)
+            document_processing_total.labels(status="failed").inc()
+            document_processing_duration_seconds.observe(time.perf_counter() - start)
             raise
 
 

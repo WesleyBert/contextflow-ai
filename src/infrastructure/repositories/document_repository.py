@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any
 from uuid import UUID
 
@@ -5,7 +6,7 @@ from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.entities.document import Document, DocumentStatus
-from src.domain.repositories.document_repository import DocumentOrderBy
+from src.domain.repositories.document_repository import DocumentOrderBy, DocumentProcessingStats
 from src.infrastructure.database.models.document import DocumentModel
 
 _ORDER_COLUMNS: dict[DocumentOrderBy, ColumnElement[Any]] = {
@@ -26,6 +27,8 @@ def _to_entity(model: DocumentModel) -> Document:
         storage_path=model.storage_path,
         status=model.status,  # type: ignore[arg-type]
         created_at=model.created_at,
+        processing_started_at=model.processing_started_at,
+        processing_finished_at=model.processing_finished_at,
     )
 
 
@@ -93,8 +96,47 @@ class SqlAlchemyDocumentRepository:
             await self._session.delete(model)
             await self._session.commit()
 
-    async def update_status(self, document_id: UUID, status: DocumentStatus) -> None:
+    async def update_status(
+        self,
+        document_id: UUID,
+        status: DocumentStatus,
+        *,
+        started_at: datetime | None = None,
+        finished_at: datetime | None = None,
+    ) -> None:
         model = await self._session.get(DocumentModel, document_id)
         if model is not None:
             model.status = status
+            if started_at is not None:
+                model.processing_started_at = started_at
+            if finished_at is not None:
+                model.processing_finished_at = finished_at
             await self._session.commit()
+
+    async def processing_stats(self) -> DocumentProcessingStats:
+        total = await self._session.scalar(select(func.count()).select_from(DocumentModel))
+        ready = await self._session.scalar(
+            select(func.count()).select_from(DocumentModel).where(DocumentModel.status == "ready")
+        )
+        failed = await self._session.scalar(
+            select(func.count())
+            .select_from(DocumentModel)
+            .where(DocumentModel.status == "failed")
+        )
+        avg_seconds = await self._session.scalar(
+            select(
+                func.avg(
+                    func.extract(
+                        "epoch",
+                        DocumentModel.processing_finished_at - DocumentModel.processing_started_at,
+                    )
+                )
+            ).where(DocumentModel.status == "ready")
+        )
+        avg_processing_time_ms = round(avg_seconds * 1000, 2) if avg_seconds is not None else None
+        return DocumentProcessingStats(
+            total=total or 0,
+            ready=ready or 0,
+            failed=failed or 0,
+            avg_processing_time_ms=avg_processing_time_ms,
+        )

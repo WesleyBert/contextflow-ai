@@ -5,6 +5,7 @@ dos services, sem puxar toda a infraestrutura de banco/app.
 """
 
 import hashlib
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -92,7 +93,9 @@ class InlineTaskQueue:
             return
 
         try:
-            await document_repository.update_status(document_id, "processing")
+            await document_repository.update_status(
+                document_id, "processing", started_at=datetime.now(UTC)
+            )
 
             content = LocalFileStorage().read(document.storage_path)
             chunk_repository = SqlAlchemyDocumentChunkRepository(self._session)
@@ -101,7 +104,11 @@ class InlineTaskQueue:
             )
             await processing_service.process(document, content)
 
-            await document_repository.update_status(document_id, "ready")
+            await document_repository.update_status(
+                document_id, "ready", finished_at=datetime.now(UTC)
+            )
         except Exception:
-            await document_repository.update_status(document_id, "failed")
+            await document_repository.update_status(
+                document_id, "failed", finished_at=datetime.now(UTC)
+            )
             raise

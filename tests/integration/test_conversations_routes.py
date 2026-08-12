@@ -191,3 +191,64 @@ async def test_list_messages_returns_404_for_unknown_conversation(client: AsyncC
     )
 
     assert response.status_code == 404
+
+
+async def test_set_message_feedback_persists_and_is_reflected_in_messages(
+    client: AsyncClient,
+) -> None:
+    token, _ = await register_and_login(client)
+    conversation = (
+        await client.post(
+            "/api/v1/conversations", headers=auth_headers(token), json={"title": "Conversa"}
+        )
+    ).json()
+    exchange = (
+        await client.post(
+            f"/api/v1/conversations/{conversation['id']}/messages",
+            headers=auth_headers(token),
+            json={"content": "qual a capital do brasil?"},
+        )
+    ).json()
+    assistant_message_id = exchange["assistant_message"]["id"]
+
+    response = await client.post(
+        f"/api/v1/conversations/{conversation['id']}/messages/{assistant_message_id}/feedback",
+        headers=auth_headers(token),
+        json={"rating": "up"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["feedback"] == "up"
+
+    messages = (
+        await client.get(
+            f"/api/v1/conversations/{conversation['id']}/messages", headers=auth_headers(token)
+        )
+    ).json()
+    assistant_message = next(m for m in messages if m["id"] == assistant_message_id)
+    assert assistant_message["feedback"] == "up"
+
+
+async def test_set_message_feedback_rejects_user_message(client: AsyncClient) -> None:
+    token, _ = await register_and_login(client)
+    conversation = (
+        await client.post(
+            "/api/v1/conversations", headers=auth_headers(token), json={"title": "Conversa"}
+        )
+    ).json()
+    exchange = (
+        await client.post(
+            f"/api/v1/conversations/{conversation['id']}/messages",
+            headers=auth_headers(token),
+            json={"content": "qual a capital do brasil?"},
+        )
+    ).json()
+    user_message_id = exchange["user_message"]["id"]
+
+    response = await client.post(
+        f"/api/v1/conversations/{conversation['id']}/messages/{user_message_id}/feedback",
+        headers=auth_headers(token),
+        json={"rating": "up"},
+    )
+
+    assert response.status_code == 422

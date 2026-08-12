@@ -1,7 +1,13 @@
 from typing import Literal, Protocol
 from uuid import UUID
 
-from src.domain.entities.conversation import Conversation, Message, MessageRole, MessageSource
+from src.domain.entities.conversation import (
+    Conversation,
+    Message,
+    MessageFeedback,
+    MessageRole,
+    MessageSource,
+)
 
 ConversationOrderBy = Literal["created_at_desc", "created_at_asc", "title_asc", "title_desc"]
 
@@ -32,3 +38,9 @@ class ConversationRepository(Protocol):
     ) -> Message: ...
 
     async def list_messages(self, conversation_id: UUID) -> list[Message]: ...
+
+    async def get_message_by_id(self, message_id: UUID) -> Message | None: ...
+
+    async def set_message_feedback(
+        self, message_id: UUID, feedback: MessageFeedback
+    ) -> Message | None: ...

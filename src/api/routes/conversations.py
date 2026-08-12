@@ -1,15 +1,17 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Header, Query, status
 
 from src.api.dependencies.auth import get_current_user
 from src.api.dependencies.conversations import get_conversation_service
+from src.api.dependencies.idempotency import get_idempotency_store
 from src.api.schemas.conversation import (
     ConversationCreateRequest,
     ConversationResponse,
     MessageCreateRequest,
     MessageExchangeResponse,
+    MessageFeedbackRequest,
     MessageResponse,
     MessageSourceResponse,
 )
@@ -18,6 +20,8 @@ from src.application.services.conversation_service import ConversationService
 from src.domain.entities.conversation import Message
 from src.domain.entities.user import User
 from src.domain.repositories.conversation_repository import ConversationOrderBy
+from src.domain.repositories.idempotency_store import IdempotencyStore
+from src.infrastructure.config import get_settings
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
@@ -29,6 +33,7 @@ def _to_message_response(message: Message) -> MessageResponse:
         content=message.content,
         created_at=message.created_at,
         sources=[MessageSourceResponse(**source.__dict__) for source in message.sources],
+        feedback=message.feedback,
     )
 
 
@@ -82,11 +87,43 @@ async def send_message(
     body: MessageCreateRequest,
     current_user: Annotated[User, Depends(get_current_user)],
     conversation_service: Annotated[ConversationService, Depends(get_conversation_service)],
+    idempotency_store: Annotated[IdempotencyStore, Depends(get_idempotency_store)],
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
 ) -> MessageExchangeResponse:
+    cache_key = (
+        f"{current_user.id}:conversations:{conversation_id}:messages:{idempotency_key}"
+        if idempotency_key
+        else None
+    )
+    if cache_key:
+        cached = await idempotency_store.get(cache_key)
+        if cached:
+            return MessageExchangeResponse.model_validate_json(cached)
+
     user_message, assistant_message = await conversation_service.send_message(
         current_user.id, conversation_id, body.content
     )
-    return MessageExchangeResponse(
+    response = MessageExchangeResponse(
         user_message=_to_message_response(user_message),
         assistant_message=_to_message_response(assistant_message),
     )
+
+    if cache_key:
+        await idempotency_store.set(
+            cache_key, response.model_dump_json(), get_settings().idempotency_ttl_seconds
+        )
+    return response
+
+
+@router.post("/{conversation_id}/messages/{message_id}/feedback", response_model=MessageResponse)
+async def set_message_feedback(
+    conversation_id: UUID,
+    message_id: UUID,
+    body: MessageFeedbackRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    conversation_service: Annotated[ConversationService, Depends(get_conversation_service)],
+) -> MessageResponse:
+    message = await conversation_service.set_message_feedback(
+        current_user.id, conversation_id, message_id, body.rating
+    )
+    return _to_message_response(message)

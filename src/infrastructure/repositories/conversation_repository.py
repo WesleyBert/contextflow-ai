@@ -4,7 +4,13 @@ from uuid import UUID
 from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.domain.entities.conversation import Conversation, Message, MessageRole, MessageSource
+from src.domain.entities.conversation import (
+    Conversation,
+    Message,
+    MessageFeedback,
+    MessageRole,
+    MessageSource,
+)
 from src.domain.repositories.conversation_repository import ConversationOrderBy
 from src.infrastructure.database.models.conversation import ConversationModel, MessageModel
 
@@ -42,6 +48,7 @@ def _message_to_entity(model: MessageModel) -> Message:
         content=model.content,
         created_at=model.created_at,
         sources=[_source_to_entity(source) for source in model.sources],
+        feedback=model.feedback,  # type: ignore[arg-type]
     )
 
 
@@ -120,3 +127,18 @@ class SqlAlchemyConversationRepository:
             .order_by(MessageModel.created_at.asc())
         )
         return [_message_to_entity(model) for model in result.scalars().all()]
+
+    async def get_message_by_id(self, message_id: UUID) -> Message | None:
+        model = await self._session.get(MessageModel, message_id)
+        return _message_to_entity(model) if model else None
+
+    async def set_message_feedback(
+        self, message_id: UUID, feedback: MessageFeedback
+    ) -> Message | None:
+        model = await self._session.get(MessageModel, message_id)
+        if model is None:
+            return None
+        model.feedback = feedback
+        await self._session.commit()
+        await self._session.refresh(model)
+        return _message_to_entity(model)
