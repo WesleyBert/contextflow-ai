@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="114" height="20" role="img"
-     aria-label="coverage: 97%">
+     aria-label="coverage: 94%">
   <linearGradient id="s" x2="0" y2="100%">
     <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
     <stop offset="1" stop-opacity=".1"/>
@@ -16,7 +16,7 @@
      font-family="Verdana,Geneva,DejaVu Sans,sans-serif">
     <text x="31" y="15" fill="#010101" fill-opacity=".3">coverage</text>
     <text x="31" y="14">coverage</text>
-    <text x="87" y="15" fill="#010101" fill-opacity=".3">97%</text>
-    <text x="87" y="14">97%</text>
+    <text x="87" y="15" fill="#010101" fill-opacity=".3">94%</text>
+    <text x="87" y="14">94%</text>
   </g>
 </svg>
