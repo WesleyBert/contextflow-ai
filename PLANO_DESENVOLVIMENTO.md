@@ -150,14 +150,19 @@ como opção configurável via variável de ambiente, documentada no README, nun
 
 ## Fase 6 — Apresentação no GitHub
 
-- [ ] README profissional com diagrama de arquitetura
-- [ ] Instruções de execução via Docker
-- [ ] Documentação dos endpoints com exemplos de request/response
-- [ ] Explicação das decisões técnicas (por que fila assíncrona, por que pgvector, etc.)
-- [ ] Prints ou vídeo demonstrativo
-- [ ] Roadmap
-- [ ] Badge de cobertura de testes
-- [ ] Pipeline do GitHub Actions visível e funcionando
+- [x] README profissional com diagrama de arquitetura (Mermaid: componentes + sequência do
+      pipeline RAG)
+- [x] Instruções de execução via Docker — Docker sobe Postgres/pgvector e Redis; API,
+      worker e front-end continuam rodando localmente (venv/npm), documentado passo a passo
+      no README. Decisão de escopo: sem Dockerfile pra API/worker/front por ora (dá pra
+      revisitar se fizer sentido containerizar tudo)
+- [x] Documentação dos endpoints com exemplos de request/response
+- [x] Explicação das decisões técnicas (por que fila assíncrona, por que pgvector, etc.)
+- [x] Prints demonstrativos (vídeo ficou de fora por ora)
+- [x] Roadmap
+- [x] Badge de cobertura de testes
+- [ ] Pipeline do GitHub Actions visível e funcionando — falta dar push (commits ainda só
+      locais) pra CI rodar de verdade no GitHub
 
 ---
 
@@ -376,3 +381,31 @@ _(Vamos registrando aqui decisões, trade-offs e coisas aprendidas ao longo do c
   (`oxlint`) limpos, 4 testes do front (`vitest`) passando, build (`tsc -b && vite build`)
   ok. Faltam pra fechar a Fase 5: UI de feedback (👍/👎) e tela administrativa — os
   endpoints já existem na API desde a Fase 4, só falta consumir no front.
+- 2026-09-04: **Fase 6 — README, decisões técnicas, badge de cobertura e capturas de
+  tela.** README reescrito: diagrama de arquitetura e sequência do pipeline RAG em
+  Mermaid, tabela de stack, passo a passo de execução (Docker pra Postgres/Redis + venv
+  pra API/worker + Ollama + `npm run dev` pro front), tabela de endpoints com exemplos de
+  request/response, seção de decisões técnicas (resumo do que já estava nas notas de
+  sessão) e roadmap. Badge de cobertura gerado sem depender de serviço externo
+  (`scripts/gen_coverage_badge.py`, lê `coverage report --format=total` e escreve um SVG
+  em `.github/badges/`; o pacote `coverage-badge` do PyPI está quebrado nesta versão do
+  Python — depende de `pkg_resources`, removido do `setuptools` recente — daí o script
+  próprio). CI (`.github/workflows/ci.yml`) ganhou um job pro front-end (lint/test/build) e
+  um passo que regenera e commita o badge automaticamente a cada push na `main`
+  (`[skip ci]` na mensagem pra não entrar em loop). **Capturas de tela reais**, geradas
+  subindo a stack inteira (API + worker + Postgres/pgvector + Redis + Ollama local +
+  front-end) e dirigindo um Chromium via Playwright: registro, upload de um documento de
+  teste até `status=pronto`, e uma pergunta respondida via RAG citando a fonte correta —
+  tudo com dados de verdade, sem mock. **Bug real encontrado nesse processo:**
+  `useDocumentStatus` (`frontend/src/api/documents.ts`) usava a queryKey `['documents',
+  documentId, 'status']`; ao status de um documento chegar num estado terminal
+  (`ready`/`failed`), o hook invalida `['documents']` (prefixo, pra atualizar a listagem) —
+  só que esse prefixo também batia na própria query de status, cujo refetch imediato
+  reavaliava o mesmo `refetchInterval`, invalidando de novo, num loop. Medido com
+  Playwright: ~22 mil requisições em 15s até o Chromium recusar com
+  `ERR_INSUFFICIENT_RESOURCES` (foi isso, e não o ambiente de automação, que quebrou as
+  primeiras tentativas de captura). Corrigido dando à query de status uma queryKey própria
+  (`['documentStatus', documentId]`), fora do prefixo `'documents'`; confirmado com o mesmo
+  script de diagnóstico (Playwright contando requisições por 15s): caiu pra 8. Front-end
+  (lint/test/build) revalidado depois do fix. Falta só dar `git push` pra Fase 6 fechar de
+  verdade (CI rodando visível no GitHub).
