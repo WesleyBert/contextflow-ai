@@ -66,7 +66,11 @@ const IN_PROGRESS_STATUSES = new Set(['pending', 'processing'])
 export function useDocumentStatus(documentId: string, initialStatus: string) {
   const queryClient = useQueryClient()
   return useQuery({
-    queryKey: ['documents', documentId, 'status'],
+    // Namespace própria (não prefixada por "documents") — a invalidação abaixo, ao
+    // atingir um status terminal, usa o prefixo "documents" pra atualizar a listagem;
+    // se essa query estivesse sob o mesmo prefixo, a invalidação bateria nela mesma e
+    // disparava um refetch imediato a cada ciclo, virando um loop infinito de requisições.
+    queryKey: ['documentStatus', documentId],
     queryFn: () => getDocumentStatus(documentId),
     initialData: { id: documentId, status: initialStatus } as DocumentStatusResponse,
     refetchInterval: (query) => {
