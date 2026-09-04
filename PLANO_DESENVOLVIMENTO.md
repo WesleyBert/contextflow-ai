@@ -141,9 +141,9 @@ como opção configurável via variável de ambiente, documentada no README, nun
 
 ## Fase 5 — Front-end (React + TypeScript)
 
-- [ ] Autenticação (login/registro)
-- [ ] Upload de documentos + status em tempo real
-- [ ] Interface de conversa com exibição das fontes citadas
+- [x] Autenticação (login/registro, com refresh automático de token)
+- [x] Upload de documentos + status em tempo real
+- [x] Interface de conversa com exibição das fontes citadas
 - [ ] Organização de documentos por projeto
 - [ ] Avaliação de respostas (thumbs up/down)
 - [ ] Tela administrativa com as métricas da Fase 4
@@ -365,3 +365,14 @@ _(Vamos registrando aqui decisões, trade-offs e coisas aprendidas ao longo do c
   liberado (200, com números batendo, inclusive tempo médio de processamento não-nulo depois
   do worker rodar) pro e-mail configurado em `ADMIN_EMAILS`. 140 testes, 97% de cobertura em
   `src/`. Lint e type-check seguem 100% limpos.
+- 2026-09-04: **Início da Fase 5 — front-end.** Vite + React 19 + TypeScript + Tailwind,
+  consumindo a API via React Query (`frontend/`). Cobre autenticação (login/registro),
+  upload de documentos com status em tempo real, listagem paginada de documentos e
+  conversas, e chat com exibição das fontes citadas pelo RAG. Do lado da API, novo endpoint
+  `POST /auth/refresh` (`access_token`/`refresh_token` novos a partir de um refresh token
+  válido) — o front guarda o refresh token e renova a sessão sem forçar novo login — e
+  `CORSMiddleware` liberando a origem do dev server do Vite (`CORS_ORIGINS`, configurável).
+  145 testes no backend, 97% de cobertura; lint/type-check do backend e do front-end
+  (`oxlint`) limpos, 4 testes do front (`vitest`) passando, build (`tsc -b && vite build`)
+  ok. Faltam pra fechar a Fase 5: UI de feedback (👍/👎) e tela administrativa — os
+  endpoints já existem na API desde a Fase 4, só falta consumir no front.
