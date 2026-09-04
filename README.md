@@ -182,6 +182,49 @@ npm run dev                 # http://localhost:5173
 > front pra API com "connection refused". Por isso o `.env.example` já aponta direto pra
 > `127.0.0.1`; se mudar pra `localhost`, teste no seu ambiente.
 
+## Deploy (demo pública)
+
+Back-end no [Render](https://render.com) (Blueprint, `render.yaml` na raiz do repo) e
+front-end no [Vercel](https://vercel.com). Os dois têm plano free, mas com limitações reais
+— detalhadas no fim desta seção antes de você decidir se serve pro seu caso.
+
+### Back-end (Render)
+
+1. Crie uma conta no Render e conecte o repositório do GitHub.
+2. **New → Blueprint**, selecione este repositório — o Render lê o `render.yaml` e propõe
+   três recursos: Postgres (`contextflow-postgres`), Redis (`contextflow-redis`) e o serviço
+   web (`contextflow-api`, que roda API **e** worker no mesmo processo — ver comentário no
+   `render.yaml` sobre por quê). Confirme o plano **Free** em cada um.
+3. Depois do primeiro deploy, em `contextflow-api` → **Environment**, defina
+   `OPENAI_API_KEY` manualmente (fica marcada como `sync: false` no blueprint — nunca é
+   commitada) com uma chave de verdade.
+4. Copie a URL pública do serviço (ex.: `https://contextflow-api.onrender.com`).
+5. Se o domínio do seu front-end no Vercel for diferente do que já está no `render.yaml`
+   (`CORS_ORIGINS`), atualize a env var `CORS_ORIGINS` (formato JSON, ex.:
+   `["https://seu-projeto.vercel.app"]`) e refaça o deploy.
+
+### Front-end (Vercel)
+
+No projeto já criado no Vercel:
+
+1. **Settings → Build & Development → Root Directory** → `frontend` (por padrão o Vercel
+   tenta buildar a raiz do repo, que é o back-end Python — é isso que causa o erro
+   `FUNCTION_INVOCATION_FAILED`/Serverless Function crashada).
+2. **Settings → Environment Variables** → `VITE_API_BASE_URL` = `https://<sua-api>.onrender.com/api/v1`.
+3. Redeploy.
+
+### Limitações do free tier (leia antes de contar com isso pra produção)
+
+- **Postgres free do Render expira em 30 dias**, com 14 dias de carência antes de apagar o
+  banco de vez — ótimo pra demo/portfólio, não pra algo que precise durar.
+- **O serviço web free "dorme" após inatividade** — a primeira requisição depois de um
+  tempo sem uso demora bem mais (cold start).
+- **Storage do documento é em disco local efêmero** — o arquivo original pode sumir num
+  restart do serviço; isso não afeta os chunks/embeddings já processados (persistidos no
+  Postgres), só um eventual re-processamento do arquivo bruto.
+- **OpenAI cobra por uso** — mesmo com `gpt-4o-mini` (barato), cada upload/pergunta na demo
+  pública gera custo real, ao contrário do Ollama local usado em desenvolvimento.
+
 ## Capturas de tela
 
 Fluxo completo, capturado ponta a ponta contra a stack real (API, worker, Postgres/pgvector

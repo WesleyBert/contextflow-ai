@@ -12,6 +12,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 from alembic import op
+from src.infrastructure.config import get_settings
 
 # revision identifiers, used by Alembic.
 revision: str = 'd99984303723'
@@ -30,7 +31,13 @@ def upgrade() -> None:
     sa.Column('owner_id', sa.Uuid(), nullable=False),
     sa.Column('chunk_index', sa.Integer(), nullable=False),
     sa.Column('content', sa.Text(), nullable=False),
-    sa.Column('embedding', pgvector.sqlalchemy.vector.VECTOR(dim=768), nullable=False),
+    # dimensão lida das Settings em vez de fixa em 768: bate com o que
+    # infrastructure/database/models/document_chunk.py já faz em runtime, e permite
+    # rodar essa migration do zero (banco novo) com EMBEDDING_DIM=1536 pra OpenAI.
+    sa.Column(
+        'embedding', pgvector.sqlalchemy.vector.VECTOR(dim=get_settings().embedding_dim),
+        nullable=False,
+    ),
     sa.Column(
         'created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False
     ),

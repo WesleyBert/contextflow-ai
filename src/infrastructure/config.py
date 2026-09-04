@@ -1,6 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,6 +13,18 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     database_url: str = "postgresql+asyncpg://contextflow:contextflow@localhost:5432/contextflow"
+
+    @field_validator("database_url")
+    @classmethod
+    def _force_asyncpg_driver(cls, value: str) -> str:
+        # provedores gerenciados (Render, Railway, etc.) costumam entregar a connection
+        # string sem driver explícito (`postgresql://...` ou `postgres://...`) — o
+        # SQLAlchemy async precisa do driver `asyncpg` no scheme pra funcionar.
+        if value.startswith("postgres://"):
+            return value.replace("postgres://", "postgresql+asyncpg://", 1)
+        if value.startswith("postgresql://"):
+            return value.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return value
 
     redis_url: str = "redis://localhost:6379/0"
 

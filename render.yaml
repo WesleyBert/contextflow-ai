@@ -1,0 +1,62 @@
+databases:
+  - name: contextflow-postgres
+    plan: free
+    postgresMajorVersion: "16"
+    ipAllowList: []
+
+services:
+  - type: keyvalue
+    name: contextflow-redis
+    plan: free
+    ipAllowList: []
+    maxmemoryPolicy: allkeys-lru
+
+  # API + worker rodando no mesmo serviço web: o plano free do Render não tem
+  # Background Worker gratuito, e LocalFileStorage grava em disco local — se API e
+  # worker fossem serviços separados (containers/máquinas diferentes), o worker não
+  # enxergaria o arquivo que a API acabou de salvar. Decisão de escopo pra demo
+  # gratuita; uma implantação "de verdade" separaria os dois e trocaria o storage por
+  # algo como S3/R2.
+  - type: web
+    name: contextflow-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -e .
+    startCommand: bash scripts/render_start.sh
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: APP_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: contextflow-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: contextflow-redis
+          property: connectionString
+      - key: AI_PROVIDER
+        value: openai
+      # defina manualmente no dashboard do Render após o primeiro deploy (Environment
+      # → Secret File/Env Var) — nunca commitar uma chave real aqui.
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini
+      - key: OPENAI_EMBEDDING_MODEL
+        value: text-embedding-3-small
+      # text-embedding-3-small = 1536 dimensões (nomic-embed-text/Ollama, usado em
+      # dev local, é 768) — precisa bater com o provedor configurado acima.
+      - key: EMBEDDING_DIM
+        value: "1536"
+      # ajuste pro domínio real do front-end no Vercel antes do primeiro deploy.
+      - key: CORS_ORIGINS
+        value: '["https://contextflow-ai.vercel.app"]'
+      - key: ADMIN_EMAILS
+        value: ""
