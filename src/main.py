@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.middlewares.error_handling import register_exception_handlers
 from src.api.middlewares.request_logging import RequestLoggingMiddleware
@@ -15,11 +16,20 @@ API_V1_PREFIX = "/api/v1"
 
 
 def create_app() -> FastAPI:
-    configure_logging(get_settings().log_level)
+    settings = get_settings()
+    configure_logging(settings.log_level)
 
     app = FastAPI(title="ContextFlow AI", version="0.1.0")
 
     app.add_middleware(RequestLoggingMiddleware)
+    # adicionado por último pra ficar por fora de tudo (inclusive erros/preflight)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=list(settings.cors_origins),
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     register_exception_handlers(app)
 
     app.include_router(metrics_router)

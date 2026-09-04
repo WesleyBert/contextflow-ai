@@ -67,6 +67,10 @@ class Settings(BaseSettings):
     # vírgula. Vazio por padrão — ninguém tem acesso até configurar explicitamente.
     admin_emails: str = ""
 
+    # origens permitidas a chamar a API via browser (CORS) — o dev server do front-end
+    # (Vite) roda em porta separada da API
+    cors_origins: tuple[str, ...] = ("http://localhost:5173",)
+
 
 @lru_cache
 def get_settings() -> Settings:

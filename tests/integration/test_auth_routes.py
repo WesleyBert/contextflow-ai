@@ -105,3 +105,50 @@ async def test_me_rejects_token_for_deleted_or_unknown_user(client: AsyncClient)
     response = await client.get("/api/v1/auth/me", headers=auth_headers(token_for_unknown_user))
 
     assert response.status_code == 401
+
+
+async def test_refresh_returns_new_tokens(client: AsyncClient) -> None:
+    _, user_id = await register_and_login(client)
+    refresh_token = create_refresh_token(UUID(user_id))
+
+    response = await client.post(
+        "/api/v1/auth/refresh", json={"refresh_token": refresh_token}
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["access_token"]
+    assert body["refresh_token"]
+
+    me_response = await client.get("/api/v1/auth/me", headers=auth_headers(body["access_token"]))
+    assert me_response.status_code == 200
+    assert me_response.json()["id"] == user_id
+
+
+async def test_refresh_rejects_access_token(client: AsyncClient) -> None:
+    _, user_id = await register_and_login(client)
+    access_token = create_access_token(UUID(user_id))
+
+    response = await client.post(
+        "/api/v1/auth/refresh", json={"refresh_token": access_token}
+    )
+
+    assert response.status_code == 401
+
+
+async def test_refresh_rejects_invalid_token(client: AsyncClient) -> None:
+    response = await client.post(
+        "/api/v1/auth/refresh", json={"refresh_token": "token-invalido"}
+    )
+
+    assert response.status_code == 401
+
+
+async def test_refresh_rejects_token_for_deleted_or_unknown_user(client: AsyncClient) -> None:
+    refresh_token_for_unknown_user = create_refresh_token(uuid4())
+
+    response = await client.post(
+        "/api/v1/auth/refresh", json={"refresh_token": refresh_token_for_unknown_user}
+    )
+
+    assert response.status_code == 401
